@@ -159,15 +159,17 @@ def _process_rpc_transaction(tx: dict, sig: str, wallet_id: int, name: str,
     # Find all mints where this wallet's balance changed
     all_keys = set(pre_balances.keys()) | set(post_balances.keys())
     wallet_changes = []
+    wsol_delta = 0.0  # track WSOL changes separately for SOL amount estimate
     for (mint, owner) in all_keys:
         if owner != address:
-            continue
-        if mint == WSOL_MINT:
             continue
         pre = pre_balances.get((mint, owner), 0)
         post = post_balances.get((mint, owner), 0)
         delta = post - pre
         if abs(delta) < 1e-9:
+            continue
+        if mint == WSOL_MINT:
+            wsol_delta = delta  # negative = SOL spent, positive = SOL received
             continue
         wallet_changes.append({
             'mint': mint,
@@ -179,7 +181,7 @@ def _process_rpc_transaction(tx: dict, sig: str, wallet_id: int, name: str,
     if not wallet_changes:
         return
 
-    # Calculate SOL spent/received from native balance change
+    # Calculate SOL spent/received: combine native balance change + WSOL change
     account_keys = [k.get("pubkey") if isinstance(k, dict) else k
                     for k in message.get("accountKeys", [])]
     wallet_idx = None
@@ -188,26 +190,40 @@ def _process_rpc_transaction(tx: dict, sig: str, wallet_id: int, name: str,
             wallet_idx = i
             break
 
-    sol_amount = 0
+    native_sol_delta = 0.0
     if wallet_idx is not None:
         pre_sol = meta.get("preBalances", [])[wallet_idx] if wallet_idx < len(meta.get("preBalances", [])) else 0
         post_sol = meta.get("postBalances", [])[wallet_idx] if wallet_idx < len(meta.get("postBalances", [])) else 0
-        sol_amount = abs(pre_sol - post_sol) / 1e9  # lamports to SOL
+        native_sol_delta = (pre_sol - post_sol) / 1e9  # positive = SOL spent
+
+    # Total SOL involved = native change + WSOL unwrapped/wrapped
+    sol_amount = abs(native_sol_delta) + abs(wsol_delta)
 
     for change in wallet_changes:
         mint = change['mint']
         action = change['action']
         token_amount = change['token_amount']
-        amount_usd = sol_amount * sol_price
 
-        # Get token symbol (cached)
-        token_symbol = _get_token_symbol(mint)
+        # Get token symbol + price from DexScreener (single cached call)
+        token_info = _get_token_info(mint)
+        token_symbol = token_info['symbol']
+        token_price_usd = token_info['price_usd']
+
+        # USD value: prefer token_price * amount (accurate for any swap route)
+        # Fall back to SOL-based estimate only if token price unavailable
+        if token_price_usd > 0:
+            amount_usd = token_amount * token_price_usd
+        else:
+            amount_usd = sol_amount * sol_price
 
         # Apply conviction filter — reject $0/None buys
         is_conviction = (action == "buy"
                          and amount_usd is not None
                          and amount_usd > 0
                          and amount_usd >= min_usd)
+
+        # Derive SOL amount from USD if we used token price
+        est_sol = amount_usd / sol_price if sol_price > 0 else sol_amount
 
         # Log transaction
         try:
@@ -219,7 +235,7 @@ def _process_rpc_transaction(tx: dict, sig: str, wallet_id: int, name: str,
                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                    ON CONFLICT (tx_signature) DO NOTHING""",
                 (wallet_id, mint, token_symbol, sig, action,
-                 Decimal(str(sol_amount)), Decimal(str(amount_usd)),
+                 Decimal(str(round(est_sol, 9))), Decimal(str(round(amount_usd, 2))),
                  Decimal(str(token_amount)), tx_time, is_conviction,
                  f"tier={tier}"),
             )
@@ -227,8 +243,8 @@ def _process_rpc_transaction(tx: dict, sig: str, wallet_id: int, name: str,
             log.error("Failed to log KOL transaction: %s", e)
             return
 
-        log.info("KOL %s %s %s (%s) — $%.0f (conviction=%s)",
-                 name, action, token_symbol or mint[:12], action, amount_usd, is_conviction)
+        log.info("KOL %s %s %s — $%.2f (%.4f SOL, conviction=%s)",
+                 name, action, token_symbol or mint[:12], amount_usd, est_sol, is_conviction)
 
         # Trigger entry pipeline for conviction buys on Tier 1
         if is_conviction and action == "buy" and tier == 1:
@@ -435,23 +451,29 @@ def get_kol_status(token_address: str) -> dict:
         return {'triggering_kol': None, 'status': 'none', 'pct_sold': 0, 'wallets_holding': 0}
 
 
-# Token symbol cache
-_symbol_cache = {}
+# Token info cache: {address: {'symbol': str|None, 'price_usd': float}}
+_token_info_cache = {}
 
 
-def _get_token_symbol(token_address: str) -> str | None:
-    """Get token symbol from DexScreener (with cache)."""
-    if token_address in _symbol_cache:
-        return _symbol_cache[token_address]
+def _get_token_info(token_address: str) -> dict:
+    """Get token symbol and USD price from DexScreener (with cache).
 
+    Returns:
+        {'symbol': str|None, 'price_usd': float}
+    """
+    if token_address in _token_info_cache:
+        return _token_info_cache[token_address]
+
+    info = {'symbol': None, 'price_usd': 0.0}
     try:
         data = get_json(f"https://api.dexscreener.com/latest/dex/tokens/{token_address}")
         pairs = data.get("pairs", [])
         if pairs:
-            symbol = pairs[0].get("baseToken", {}).get("symbol")
-            if symbol:
-                _symbol_cache[token_address] = symbol
-                return symbol
+            pair = pairs[0]
+            info['symbol'] = pair.get("baseToken", {}).get("symbol")
+            info['price_usd'] = float(pair.get("priceUsd") or 0)
     except Exception:
         pass
-    return None
+
+    _token_info_cache[token_address] = info
+    return info
