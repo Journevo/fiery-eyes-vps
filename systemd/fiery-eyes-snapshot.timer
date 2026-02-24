@@ -1,0 +1,12 @@
+[Unit]
+Description=Fiery Eyes — Daily Snapshot Timer (also 4-hourly for momentum)
+
+[Timer]
+# Daily full snapshot
+OnCalendar=*-*-* 05:30:00
+# 4-hourly momentum snapshot
+OnCalendar=*-*-* 00,04,08,12,16,20:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

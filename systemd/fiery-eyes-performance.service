@@ -1,0 +1,15 @@
+[Unit]
+Description=Fiery Eyes — Weekly Performance Review
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/fiery-eyes
+ExecStart=/opt/fiery-eyes/venv/bin/python main.py performance
+EnvironmentFile=/opt/fiery-eyes/.env
+User=fiery-eyes
+StandardOutput=append:/opt/fiery-eyes/logs/performance.log
+StandardError=append:/opt/fiery-eyes/logs/performance.log
+
+[Install]
+WantedBy=multi-user.target

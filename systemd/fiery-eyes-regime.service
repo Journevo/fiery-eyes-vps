@@ -1,0 +1,15 @@
+[Unit]
+Description=Fiery Eyes — Daily Regime Calculation
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/fiery-eyes
+ExecStart=/opt/fiery-eyes/venv/bin/python main.py regime
+EnvironmentFile=/opt/fiery-eyes/.env
+User=fiery-eyes
+StandardOutput=append:/opt/fiery-eyes/logs/regime.log
+StandardError=append:/opt/fiery-eyes/logs/regime.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=Fiery Eyes v2 Main Loop
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/fiery-eyes
+ExecStart=/opt/fiery-eyes/venv/bin/python main_v2.py
+Restart=always
+RestartSec=30
+EnvironmentFile=/opt/fiery-eyes/.env
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fiery-eyes-v2
+
+[Install]
+WantedBy=multi-user.target

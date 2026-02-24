@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sudo -u postgres psql -d fiery_eyes -c \"\\\\dt\" 2>&1)",
+      "Bash(tree -L 3 /opt/fiery-eyes --dirsfirst -I 'venv|__pycache__|*.pyc' 2>/dev/null || find /opt/fiery-eyes -not -path '*/venv/*' -not -path '*/__pycache__/*' -type f | sort)",
+      "Bash(sudo -u postgres psql -d fiery_eyes -f db/migrations/v2_health_score.sql 2>&1)",
+      "Bash(python -c \"from health_score.engine import score_token; print\\('Health Score engine OK'\\)\" 2>&1)",
+      "Bash(which python3 && ls /opt/fiery-eyes/venv/bin/python* 2>/dev/null || echo \"checking alternatives\" && which python3.12 python3.11 python3.10 2>/dev/null)",
+      "Bash(/opt/fiery-eyes/venv/bin/python -c \"from telegram_alpha.entry_pipeline import execute_entry; print\\('Entry pipeline OK'\\)\" 2>&1)",
+      "Bash(/opt/fiery-eyes/venv/bin/python -c \"from telegram_bot.severity import classify_alert; print\\('Alert severity OK'\\)\" 2>&1)",
+      "Bash(/opt/fiery-eyes/venv/bin/python -c \"from shadow.tracker import get_shadow_summary; print\\('Shadow tracker OK'\\)\" 2>&1)",
+      "Bash(/opt/fiery-eyes/venv/bin/python main.py health JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN 2>&1)",
+      "Bash(/opt/fiery-eyes/venv/bin/python main.py regime 2>&1)",
+      "Bash(/opt/fiery-eyes/venv/bin/python -c \"from telegram_bot.huoyan_pulse import generate_pulse; print\\('Huoyan pulse OK'\\)\" 2>&1)",
+      "Bash(/opt/fiery-eyes/venv/bin/python -c \"from telegram_bot.override_commands import parse_override; print\\('Override commands OK'\\)\" 2>&1)",
+      "Bash(/opt/fiery-eyes/venv/bin/python -c \"from shadow.moonbag_reaper import run_moonbag_reaper; print\\('Moonbag reaper OK'\\)\" 2>&1)",
+      "Bash(/opt/fiery-eyes/venv/bin/python -c \"from health_score.liquidity_ceiling import get_liquidity_ceiling; print\\('Liquidity ceiling OK'\\)\" 2>&1)",
+      "Bash(/opt/fiery-eyes/venv/bin/python -c \"from regime.multiplier import get_regime_state; print\\('Regime state OK'\\)\" 2>&1)",
+      "Bash(/opt/fiery-eyes/venv/bin/python -c \"from telegram_alpha.kk_parser import parse_message; print\\('KK parser OK'\\); addrs = parse_message\\('Check out this token JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN'\\); print\\(f'Parsed {len\\(addrs\\)} address\\(es\\): {addrs}'\\)\" 2>&1)",
+      "Bash(sudo -u postgres psql -d fiery_eyes -c \"\\\\dt\" 2>&1 | grep -E \"kol_|health_|shadow_|telegram_\")",
+      "Bash(sudo -u postgres psql -d fiery_eyes -c \"SELECT name, tier, style FROM kol_wallets ORDER BY tier, name;\" 2>&1)",
+      "Bash(sudo -u postgres psql -d fiery_eyes -c \"SELECT token_address, scaled_score, confidence_pct, recommended_action, token_tier FROM health_scores LIMIT 5;\" 2>&1)",
+      "Bash(echo \"=== NEW FILES CREATED ===\" && find /opt/fiery-eyes -newer /opt/fiery-eyes/main.py -name \"*.py\" -o -name \"*.sql\" -o -name \"*.service\" -o -name \"*.template\" 2>/dev/null | sort && echo \"\" && echo \"=== MODIFIED FILES ===\" && echo \"config.py\" && echo \"main.py\" && echo \"regime/multiplier.py\" && echo \"requirements.txt\")",
+      "Bash(find /opt/fiery-eyes/health_score /opt/fiery-eyes/kol_tracking /opt/fiery-eyes/telegram_alpha /opt/fiery-eyes/shadow /opt/fiery-eyes/telegram_bot/severity.py /opt/fiery-eyes/telegram_bot/huoyan_pulse.py /opt/fiery-eyes/telegram_bot/override_commands.py /opt/fiery-eyes/monitoring/data_health.py -name \"*.py\" 2>/dev/null | sort)",
+      "Bash(/opt/fiery-eyes/venv/bin/pip install telethon 2>&1)",
+      "Bash(git status -u)",
+      "Bash(git init && git add -A && git status)"
+    ]
+  }
+}

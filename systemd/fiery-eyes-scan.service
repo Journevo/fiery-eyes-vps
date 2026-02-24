@@ -1,0 +1,15 @@
+[Unit]
+Description=Fiery Eyes — Hourly Token Scanner
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/fiery-eyes
+ExecStart=/opt/fiery-eyes/venv/bin/python -c "from scanner.scheduler import _scan_cycle; _scan_cycle()"
+EnvironmentFile=/opt/fiery-eyes/.env
+User=fiery-eyes
+StandardOutput=append:/opt/fiery-eyes/logs/scan.log
+StandardError=append:/opt/fiery-eyes/logs/scan.log
+
+[Install]
+WantedBy=multi-user.target

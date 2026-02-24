@@ -1,0 +1,392 @@
+"""KOL Wallet Monitor — watches tracked wallets for token buys/sells.
+
+Phase 1: Poll every 60 seconds for Tier 1 wallets, every 5 min for Tier 2.
+Phase 2: Helius webhooks for instant detection.
+"""
+
+import time
+from datetime import datetime, timezone, timedelta
+from decimal import Decimal
+from config import HELIUS_API_KEY, get_logger
+from db.connection import execute, execute_one
+from quality_gate.helpers import get_json
+from monitoring.degraded import record_api_call
+
+log = get_logger("kol_tracking.monitor")
+
+HELIUS_TX_URL = "https://api.helius.xyz/v0/addresses/{address}/transactions"
+
+# SOL price cache (refreshed periodically)
+_sol_price_cache = {'price': 0, 'updated': 0}
+
+# Known program IDs
+TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+ASSOCIATED_TOKEN_PROGRAM = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+
+
+def _get_sol_price() -> float:
+    """Get current SOL price from DexScreener or cache."""
+    global _sol_price_cache
+    now = time.time()
+    if now - _sol_price_cache['updated'] < 300:  # 5min cache
+        return _sol_price_cache['price']
+    try:
+        data = get_json("https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112")
+        pairs = data.get("pairs", [])
+        if pairs:
+            price = float(pairs[0].get("priceUsd", 0) or 0)
+            _sol_price_cache = {'price': price, 'updated': now}
+            return price
+    except Exception:
+        pass
+    return _sol_price_cache.get('price', 150)  # fallback
+
+
+def check_kol_wallets():
+    """Main function: check all active KOL wallets for new transactions."""
+    if not HELIUS_API_KEY:
+        log.warning("HELIUS_API_KEY not set — KOL monitoring disabled")
+        return
+
+    try:
+        wallets = execute(
+            """SELECT id, name, wallet_address, tier, style,
+                      conviction_filter_min_usd, conviction_filter_min_hold_sec
+               FROM kol_wallets
+               WHERE is_active = TRUE
+               ORDER BY tier ASC""",
+            fetch=True,
+        )
+    except Exception as e:
+        log.error("Failed to fetch KOL wallets: %s", e)
+        return
+
+    if not wallets:
+        log.info("No active KOL wallets to monitor")
+        return
+
+    sol_price = _get_sol_price()
+
+    for wallet_id, name, address, tier, style, min_usd, min_hold_sec in wallets:
+        try:
+            _check_wallet(wallet_id, name, address, tier,
+                          float(min_usd or 500), int(min_hold_sec or 600),
+                          sol_price)
+        except Exception as e:
+            log.error("Error checking wallet %s (%s): %s", name, address[:12], e)
+
+
+def _check_wallet(wallet_id: int, name: str, address: str, tier: int,
+                   min_usd: float, min_hold_sec: int, sol_price: float):
+    """Check a single wallet for new transactions."""
+    url = HELIUS_TX_URL.format(address=address)
+    params = {"api-key": HELIUS_API_KEY, "limit": 20}
+
+    try:
+        txs = get_json(url, params=params)
+        record_api_call("helius", True)
+    except Exception as e:
+        log.error("Helius API failed for %s: %s", name, e)
+        record_api_call("helius", False)
+        return
+
+    if not isinstance(txs, list):
+        return
+
+    for tx in txs:
+        _process_transaction(tx, wallet_id, name, address, tier,
+                             min_usd, min_hold_sec, sol_price)
+
+
+def _process_transaction(tx: dict, wallet_id: int, name: str, address: str,
+                         tier: int, min_usd: float, min_hold_sec: int,
+                         sol_price: float):
+    """Process a single transaction, detect token buys/sells."""
+    sig = tx.get("signature")
+    if not sig:
+        return
+
+    # Check if already processed
+    try:
+        existing = execute_one(
+            "SELECT id FROM kol_transactions WHERE tx_signature = %s", (sig,))
+        if existing:
+            return
+    except Exception:
+        return
+
+    # Parse token transfers
+    token_transfers = tx.get("tokenTransfers", [])
+    if not token_transfers:
+        return
+
+    tx_type = tx.get("type", "")
+    timestamp = tx.get("timestamp")
+    tx_time = datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else datetime.now(timezone.utc)
+
+    for transfer in token_transfers:
+        mint = transfer.get("mint", "")
+        from_addr = transfer.get("fromUserAccount", "")
+        to_addr = transfer.get("toUserAccount", "")
+        token_amount = float(transfer.get("tokenAmount", 0) or 0)
+
+        if not mint or token_amount == 0:
+            continue
+
+        # Skip SOL wrapping/unwrapping
+        if mint == "So11111111111111111111111111111111111111112":
+            continue
+
+        # Determine if buy or sell
+        if to_addr == address:
+            action = "buy"
+        elif from_addr == address:
+            action = "sell"
+        else:
+            continue
+
+        # Estimate USD value
+        # For buys: look at native transfers (SOL spent)
+        native_transfers = tx.get("nativeTransfers", [])
+        sol_amount = 0
+        for nt in native_transfers:
+            if action == "buy" and nt.get("fromUserAccount") == address:
+                sol_amount += float(nt.get("amount", 0)) / 1e9
+            elif action == "sell" and nt.get("toUserAccount") == address:
+                sol_amount += float(nt.get("amount", 0)) / 1e9
+
+        amount_usd = sol_amount * sol_price
+
+        # Get token symbol from DexScreener (cached)
+        token_symbol = _get_token_symbol(mint)
+
+        # Apply conviction filter
+        is_conviction = False
+        if action == "buy" and amount_usd >= min_usd:
+            is_conviction = True
+
+        # Log transaction
+        try:
+            execute(
+                """INSERT INTO kol_transactions
+                   (kol_wallet_id, token_address, token_symbol, tx_signature,
+                    action, amount_sol, amount_usd, token_amount, detected_at,
+                    is_conviction_buy, notes)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                   ON CONFLICT (tx_signature) DO NOTHING""",
+                (wallet_id, mint, token_symbol, sig, action,
+                 Decimal(str(sol_amount)), Decimal(str(amount_usd)),
+                 Decimal(str(token_amount)), tx_time, is_conviction,
+                 f"tier={tier}"),
+            )
+        except Exception as e:
+            log.error("Failed to log KOL transaction: %s", e)
+            return
+
+        log.info("KOL %s %s %s (%s) — $%.0f (conviction=%s)",
+                 name, action, token_symbol or mint[:12], action, amount_usd, is_conviction)
+
+        # Trigger entry pipeline for conviction buys on Tier 1
+        if is_conviction and action == "buy" and tier == 1:
+            _trigger_entry(mint, token_symbol, name, amount_usd, address)
+
+        # Trigger exit alert for large sells
+        if action == "sell":
+            _check_exit_signal(wallet_id, name, mint, token_symbol, token_amount, tier)
+
+
+def _trigger_entry(token_address: str, token_symbol: str | None, kol_name: str,
+                   amount_usd: float, kol_wallet: str):
+    """Trigger entry pipeline for a Tier 1 KOL conviction buy."""
+    log.info("TRIGGER: Tier 1 KOL %s conviction buy %s ($%.0f)",
+             kol_name, token_symbol or token_address[:12], amount_usd)
+
+    try:
+        from telegram_alpha.entry_pipeline import execute_entry
+        execute_entry(
+            token_address,
+            entry_type='kol_wallet',
+            token_data={
+                'symbol': token_symbol,
+                'kol_name': kol_name,
+                'amount_usd': amount_usd,
+                'kol_wallet': kol_wallet,
+            },
+        )
+    except Exception as e:
+        log.error("Failed to trigger entry pipeline: %s", e)
+
+    # Send alert
+    try:
+        from telegram_bot.severity import route_alert
+        msg = (f"🔴 <b>TIER 1 KOL BUY</b>\n"
+               f"👤 {kol_name}\n"
+               f"🪙 {token_symbol or token_address[:12]}\n"
+               f"💰 ${amount_usd:,.0f}\n"
+               f"⚡ Auto-entry triggered")
+        route_alert(1, msg)
+    except Exception as e:
+        log.error("Failed to send KOL alert: %s", e)
+
+
+def _check_exit_signal(wallet_id: int, name: str, token_address: str,
+                       token_symbol: str | None, sold_amount: float, tier: int):
+    """Check if this sell constitutes a major exit signal."""
+    try:
+        row = execute_one(
+            """SELECT SUM(CASE WHEN action='buy' THEN token_amount ELSE 0 END) as total_bought,
+                      SUM(CASE WHEN action='sell' THEN token_amount ELSE 0 END) as total_sold
+               FROM kol_transactions
+               WHERE kol_wallet_id = %s AND token_address = %s""",
+            (wallet_id, token_address),
+        )
+        if row and row[0] and row[0] > 0:
+            total_bought = float(row[0])
+            total_sold = float(row[1] or 0)
+            pct_sold = (total_sold / total_bought) * 100
+
+            if pct_sold > 50 and tier <= 2:
+                log.warning("KOL EXIT SIGNAL: %s sold %.0f%% of %s",
+                            name, pct_sold, token_symbol or token_address[:12])
+                try:
+                    from telegram_bot.severity import route_alert
+                    msg = (f"🔴 <b>KOL EXIT SIGNAL</b>\n"
+                           f"👤 {name} sold {pct_sold:.0f}% of "
+                           f"{token_symbol or token_address[:12]}")
+                    route_alert(1, msg)
+                except Exception:
+                    pass
+    except Exception as e:
+        log.debug("Exit signal check failed: %s", e)
+
+
+def detect_convergence() -> list[dict]:
+    """Check if 3+ KOL wallets bought same token in last 30 min.
+
+    Returns list of convergence signals.
+    """
+    try:
+        rows = execute(
+            """SELECT token_address, token_symbol,
+                      COUNT(DISTINCT kol_wallet_id) as wallet_count,
+                      ARRAY_AGG(DISTINCT kw.name) as kol_names
+               FROM kol_transactions kt
+               JOIN kol_wallets kw ON kw.id = kt.kol_wallet_id
+               WHERE kt.action = 'buy'
+                 AND kt.is_conviction_buy = TRUE
+                 AND kt.detected_at > NOW() - INTERVAL '30 minutes'
+               GROUP BY token_address, token_symbol
+               HAVING COUNT(DISTINCT kol_wallet_id) >= 3""",
+            fetch=True,
+        )
+
+        convergences = []
+        for token_addr, token_sym, count, names in (rows or []):
+            convergences.append({
+                'token_address': token_addr,
+                'token_symbol': token_sym,
+                'wallet_count': count,
+                'kol_names': names,
+                'type': 'kolscan_convergence',
+            })
+            log.info("KOL CONVERGENCE: %d wallets bought %s in 30min",
+                     count, token_sym or token_addr[:12])
+
+        return convergences
+    except Exception as e:
+        log.error("Convergence detection failed: %s", e)
+        return []
+
+
+def get_kol_status(token_address: str) -> dict:
+    """Get KOL status for a token (used by health score KOL signal).
+
+    Returns:
+        {
+            'triggering_kol': str|None,
+            'status': 'adding'|'holding'|'selling'|'exited'|'none',
+            'pct_sold': float,
+            'wallets_holding': int,
+        }
+    """
+    try:
+        rows = execute(
+            """SELECT kw.name, kw.tier, kt.action,
+                      SUM(CASE WHEN kt.action='buy' THEN kt.token_amount ELSE 0 END) as bought,
+                      SUM(CASE WHEN kt.action='sell' THEN kt.token_amount ELSE 0 END) as sold
+               FROM kol_transactions kt
+               JOIN kol_wallets kw ON kw.id = kt.kol_wallet_id
+               WHERE kt.token_address = %s
+               GROUP BY kw.name, kw.tier, kt.action
+               ORDER BY kw.tier ASC""",
+            (token_address,),
+            fetch=True,
+        )
+
+        if not rows:
+            return {'triggering_kol': None, 'status': 'none', 'pct_sold': 0, 'wallets_holding': 0}
+
+        # Aggregate per KOL
+        kols = {}
+        for name, tier, action, bought, sold in rows:
+            if name not in kols:
+                kols[name] = {'tier': tier, 'bought': 0, 'sold': 0}
+            kols[name]['bought'] += float(bought or 0)
+            kols[name]['sold'] += float(sold or 0)
+
+        # Find triggering KOL (first Tier 1, or highest buyer)
+        triggering = None
+        for name, data in sorted(kols.items(), key=lambda x: x[1]['tier']):
+            if data['bought'] > 0:
+                triggering = name
+                break
+
+        # Overall status
+        total_bought = sum(k['bought'] for k in kols.values())
+        total_sold = sum(k['sold'] for k in kols.values())
+        pct_sold = (total_sold / total_bought * 100) if total_bought > 0 else 0
+
+        wallets_holding = sum(1 for k in kols.values()
+                              if k['bought'] > 0 and k['sold'] < k['bought'] * 0.5)
+
+        if pct_sold > 80:
+            status = 'exited'
+        elif pct_sold > 30:
+            status = 'selling'
+        elif wallets_holding > 0:
+            status = 'holding'
+        else:
+            status = 'adding'
+
+        return {
+            'triggering_kol': triggering,
+            'status': status,
+            'pct_sold': round(pct_sold, 1),
+            'wallets_holding': wallets_holding,
+        }
+
+    except Exception as e:
+        log.error("get_kol_status failed: %s", e)
+        return {'triggering_kol': None, 'status': 'none', 'pct_sold': 0, 'wallets_holding': 0}
+
+
+# Token symbol cache
+_symbol_cache = {}
+
+
+def _get_token_symbol(token_address: str) -> str | None:
+    """Get token symbol from DexScreener (with cache)."""
+    if token_address in _symbol_cache:
+        return _symbol_cache[token_address]
+
+    try:
+        data = get_json(f"https://api.dexscreener.com/latest/dex/tokens/{token_address}")
+        pairs = data.get("pairs", [])
+        if pairs:
+            symbol = pairs[0].get("baseToken", {}).get("symbol")
+            if symbol:
+                _symbol_cache[token_address] = symbol
+                return symbol
+    except Exception:
+        pass
+    return None

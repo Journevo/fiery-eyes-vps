@@ -1,0 +1,17 @@
+[Unit]
+Description=Fiery Eyes KK Telegram Listener
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/fiery-eyes
+ExecStart=/opt/fiery-eyes/venv/bin/python -m telegram_alpha.kk_parser
+Restart=always
+RestartSec=10
+EnvironmentFile=/opt/fiery-eyes/.env
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fiery-eyes-kk
+
+[Install]
+WantedBy=multi-user.target

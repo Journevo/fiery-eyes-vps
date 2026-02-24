@@ -1,0 +1,9 @@
+[Unit]
+Description=Fiery Eyes — Weekly Performance Review Timer
+
+[Timer]
+OnCalendar=Sun *-*-* 07:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
