@@ -7,14 +7,12 @@ Phase 2: Helius webhooks for instant detection.
 import time
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
-from config import HELIUS_API_KEY, get_logger
+from config import HELIUS_API_KEY, HELIUS_RPC_URL, get_logger
 from db.connection import execute, execute_one
-from quality_gate.helpers import get_json
+from quality_gate.helpers import get_json, post_json
 from monitoring.degraded import record_api_call
 
 log = get_logger("kol_tracking.monitor")
-
-HELIUS_TX_URL = "https://api.helius.xyz/v0/addresses/{address}/transactions"
 
 # SOL price cache (refreshed periodically)
 _sol_price_cache = {'price': 0, 'updated': 0}
@@ -22,6 +20,7 @@ _sol_price_cache = {'price': 0, 'updated': 0}
 # Known program IDs
 TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 ASSOCIATED_TOKEN_PROGRAM = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+WSOL_MINT = "So11111111111111111111111111111111111111112"
 
 
 def _get_sol_price() -> float:
@@ -78,92 +77,131 @@ def check_kol_wallets():
 
 def _check_wallet(wallet_id: int, name: str, address: str, tier: int,
                    min_usd: float, min_hold_sec: int, sol_price: float):
-    """Check a single wallet for new transactions."""
-    url = HELIUS_TX_URL.format(address=address)
-    params = {"api-key": HELIUS_API_KEY, "limit": 20}
-
+    """Check a single wallet for new transactions via Helius RPC."""
+    # Step 1: Get recent transaction signatures
     try:
-        txs = get_json(url, params=params)
+        sig_resp = post_json(HELIUS_RPC_URL, {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getSignaturesForAddress",
+            "params": [address, {"limit": 20}],
+        })
+        sigs = sig_resp.get("result", [])
         record_api_call("helius", True)
     except Exception as e:
-        log.error("Helius API failed for %s: %s", name, e)
+        log.error("Helius RPC failed for %s: %s", name, e)
         record_api_call("helius", False)
         return
 
-    if not isinstance(txs, list):
+    if not sigs:
         return
 
-    for tx in txs:
-        _process_transaction(tx, wallet_id, name, address, tier,
-                             min_usd, min_hold_sec, sol_price)
-
-
-def _process_transaction(tx: dict, wallet_id: int, name: str, address: str,
-                         tier: int, min_usd: float, min_hold_sec: int,
-                         sol_price: float):
-    """Process a single transaction, detect token buys/sells."""
-    sig = tx.get("signature")
-    if not sig:
-        return
-
-    # Check if already processed
-    try:
-        existing = execute_one(
-            "SELECT id FROM kol_transactions WHERE tx_signature = %s", (sig,))
-        if existing:
-            return
-    except Exception:
-        return
-
-    # Parse token transfers
-    token_transfers = tx.get("tokenTransfers", [])
-    if not token_transfers:
-        return
-
-    tx_type = tx.get("type", "")
-    timestamp = tx.get("timestamp")
-    tx_time = datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else datetime.now(timezone.utc)
-
-    for transfer in token_transfers:
-        mint = transfer.get("mint", "")
-        from_addr = transfer.get("fromUserAccount", "")
-        to_addr = transfer.get("toUserAccount", "")
-        token_amount = float(transfer.get("tokenAmount", 0) or 0)
-
-        if not mint or token_amount == 0:
+    # Step 2: Fetch full transaction details for each signature
+    for sig_info in sigs:
+        sig = sig_info.get("signature")
+        if not sig:
             continue
 
-        # Skip SOL wrapping/unwrapping
-        if mint == "So11111111111111111111111111111111111111112":
+        # Skip already-processed signatures early (avoid unnecessary RPC calls)
+        try:
+            existing = execute_one(
+                "SELECT id FROM kol_transactions WHERE tx_signature = %s", (sig,))
+            if existing:
+                continue
+        except Exception:
             continue
 
-        # Determine if buy or sell
-        if to_addr == address:
-            action = "buy"
-        elif from_addr == address:
-            action = "sell"
-        else:
+        try:
+            tx_resp = post_json(HELIUS_RPC_URL, {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "getTransaction",
+                "params": [sig, {"encoding": "jsonParsed",
+                                 "maxSupportedTransactionVersion": 0}],
+            })
+            tx = tx_resp.get("result")
+            if tx:
+                _process_rpc_transaction(tx, sig, wallet_id, name, address,
+                                         tier, min_usd, min_hold_sec, sol_price)
+        except Exception as e:
+            log.debug("Failed to fetch tx %s for %s: %s", sig[:16], name, e)
+
+
+def _process_rpc_transaction(tx: dict, sig: str, wallet_id: int, name: str,
+                              address: str, tier: int, min_usd: float,
+                              min_hold_sec: int, sol_price: float):
+    """Process a jsonParsed RPC transaction, detect token buys/sells."""
+    # Extract block time
+    block_time = tx.get("blockTime")
+    tx_time = (datetime.fromtimestamp(block_time, tz=timezone.utc)
+               if block_time else datetime.now(timezone.utc))
+
+    # Parse inner instructions and main instructions for SPL token transfers
+    meta = tx.get("meta", {})
+    if meta.get("err") is not None:
+        return  # failed transaction
+
+    message = tx.get("transaction", {}).get("message", {})
+
+    # Collect all token balance changes from pre/postTokenBalances
+    pre_balances = {
+        (b.get("mint"), b.get("owner")): float(b.get("uiTokenAmount", {}).get("uiAmount") or 0)
+        for b in meta.get("preTokenBalances", [])
+    }
+    post_balances = {
+        (b.get("mint"), b.get("owner")): float(b.get("uiTokenAmount", {}).get("uiAmount") or 0)
+        for b in meta.get("postTokenBalances", [])
+    }
+
+    # Find all mints where this wallet's balance changed
+    all_keys = set(pre_balances.keys()) | set(post_balances.keys())
+    wallet_changes = []
+    for (mint, owner) in all_keys:
+        if owner != address:
             continue
+        if mint == WSOL_MINT:
+            continue
+        pre = pre_balances.get((mint, owner), 0)
+        post = post_balances.get((mint, owner), 0)
+        delta = post - pre
+        if abs(delta) < 1e-9:
+            continue
+        wallet_changes.append({
+            'mint': mint,
+            'delta': delta,
+            'action': 'buy' if delta > 0 else 'sell',
+            'token_amount': abs(delta),
+        })
 
-        # Estimate USD value
-        # For buys: look at native transfers (SOL spent)
-        native_transfers = tx.get("nativeTransfers", [])
-        sol_amount = 0
-        for nt in native_transfers:
-            if action == "buy" and nt.get("fromUserAccount") == address:
-                sol_amount += float(nt.get("amount", 0)) / 1e9
-            elif action == "sell" and nt.get("toUserAccount") == address:
-                sol_amount += float(nt.get("amount", 0)) / 1e9
+    if not wallet_changes:
+        return
 
+    # Calculate SOL spent/received from native balance change
+    account_keys = [k.get("pubkey") if isinstance(k, dict) else k
+                    for k in message.get("accountKeys", [])]
+    wallet_idx = None
+    for i, key in enumerate(account_keys):
+        if key == address:
+            wallet_idx = i
+            break
+
+    sol_amount = 0
+    if wallet_idx is not None:
+        pre_sol = meta.get("preBalances", [])[wallet_idx] if wallet_idx < len(meta.get("preBalances", [])) else 0
+        post_sol = meta.get("postBalances", [])[wallet_idx] if wallet_idx < len(meta.get("postBalances", [])) else 0
+        sol_amount = abs(pre_sol - post_sol) / 1e9  # lamports to SOL
+
+    for change in wallet_changes:
+        mint = change['mint']
+        action = change['action']
+        token_amount = change['token_amount']
         amount_usd = sol_amount * sol_price
 
-        # Get token symbol from DexScreener (cached)
+        # Get token symbol (cached)
         token_symbol = _get_token_symbol(mint)
 
         # Apply conviction filter
-        is_conviction = False
-        if action == "buy" and amount_usd >= min_usd:
-            is_conviction = True
+        is_conviction = (action == "buy" and amount_usd >= min_usd)
 
         # Log transaction
         try:
