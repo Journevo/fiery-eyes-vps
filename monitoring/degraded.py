@@ -23,15 +23,16 @@ log = get_logger("monitoring.degraded")
 
 _api_stats: dict[str, dict] = defaultdict(lambda: {
     "success": 0, "failure": 0, "last_success": None, "last_failure": None,
+    "consecutive_failures": 0, "failure_timestamps": [],
 })
 _degraded_mode = False
 _last_run_times: dict[str, datetime] = {}
 _lock = threading.Lock()
 
 # Thresholds
-FAILURE_THRESHOLD_PCT = 30  # enter degraded if >30% failure rate
-MIN_CALLS_FOR_EVAL = 10     # need at least this many calls to evaluate
-SILENCE_TIMEOUT_MINUTES = 15  # alert if scheduled run misses by this much
+CONSECUTIVE_FAILURES_REQUIRED = 3   # 3 consecutive failures from same source
+FAILURE_WINDOW_SECONDS = 600        # ... within 10 minutes
+SILENCE_TIMEOUT_MINUTES = 15        # alert if scheduled run misses by this much
 
 
 # ---------------------------------------------------------------------------
@@ -45,13 +46,27 @@ def record_api_call(source: str, success: bool):
         source: name of the API (e.g., "dexscreener", "helius", "coingecko", "defillama")
         success: whether the call succeeded
     """
+    now = datetime.now(timezone.utc)
+    now_ts = time.time()
+
     with _lock:
+        stats = _api_stats[source]
         if success:
-            _api_stats[source]["success"] += 1
-            _api_stats[source]["last_success"] = datetime.now(timezone.utc)
+            stats["success"] += 1
+            stats["last_success"] = now
+            # Reset consecutive failure counter on success
+            stats["consecutive_failures"] = 0
+            stats["failure_timestamps"] = []
         else:
-            _api_stats[source]["failure"] += 1
-            _api_stats[source]["last_failure"] = datetime.now(timezone.utc)
+            stats["failure"] += 1
+            stats["last_failure"] = now
+            stats["consecutive_failures"] += 1
+            # Track failure timestamps, prune old ones outside window
+            stats["failure_timestamps"].append(now_ts)
+            cutoff = now_ts - FAILURE_WINDOW_SECONDS
+            stats["failure_timestamps"] = [
+                t for t in stats["failure_timestamps"] if t > cutoff
+            ]
 
     # Check if we should enter/exit degraded mode
     _evaluate_degraded_mode()
@@ -68,45 +83,44 @@ def record_run_completion(task_name: str):
 # ---------------------------------------------------------------------------
 
 def _evaluate_degraded_mode():
-    """Evaluate whether to enter or exit degraded mode."""
+    """Evaluate whether to enter or exit degraded mode.
+
+    Requires 3 consecutive failures from the same source within 10 minutes
+    before flagging degraded.  A single transient 429 or timeout won't trigger it.
+    """
     global _degraded_mode
 
+    now_ts = time.time()
+    cutoff = now_ts - FAILURE_WINDOW_SECONDS
+
     with _lock:
-        failing_sources = 0
-        total_sources = 0
+        degraded_sources = []
 
         for source, stats in _api_stats.items():
-            total_calls = stats["success"] + stats["failure"]
-            if total_calls < MIN_CALLS_FOR_EVAL:
-                continue
+            # Count consecutive failures that occurred within the window
+            recent_consecutive = stats["consecutive_failures"]
+            recent_in_window = [t for t in stats["failure_timestamps"] if t > cutoff]
 
-            total_sources += 1
-            failure_rate = stats["failure"] / total_calls * 100
+            if (recent_consecutive >= CONSECUTIVE_FAILURES_REQUIRED
+                    and len(recent_in_window) >= CONSECUTIVE_FAILURES_REQUIRED):
+                degraded_sources.append(source)
 
-            if failure_rate > FAILURE_THRESHOLD_PCT:
-                failing_sources += 1
-
-        if total_sources == 0:
-            return
-
-        overall_failure_pct = (failing_sources / total_sources) * 100
-
-    was_degraded = _degraded_mode
-
-    if overall_failure_pct > FAILURE_THRESHOLD_PCT:
+    if degraded_sources:
         if not _degraded_mode:
             _degraded_mode = True
-            log.critical("ENTERING DEGRADED MODE — %.0f%% of sources failing", overall_failure_pct)
+            src_list = ", ".join(degraded_sources)
+            log.critical("ENTERING DEGRADED MODE — sources with %d+ consecutive failures: %s",
+                         CONSECUTIVE_FAILURES_REQUIRED, src_list)
             send_message(
                 "🔴 <b>DEGRADED MODE ACTIVATED</b>\n\n"
-                f"⚠️ {failing_sources}/{total_sources} data sources failing "
-                f"({overall_failure_pct:.0f}%)\n"
+                f"⚠️ {len(degraded_sources)} source(s) with {CONSECUTIVE_FAILURES_REQUIRED}+ "
+                f"consecutive failures in {FAILURE_WINDOW_SECONDS // 60}min: {src_list}\n"
                 "• No new alerts will be issued\n"
                 "• Existing positions monitored only\n"
                 "• Check API keys and service status"
             )
-    elif _degraded_mode and overall_failure_pct < FAILURE_THRESHOLD_PCT / 2:
-        # Exit degraded mode when failure rate drops below half the threshold
+    elif _degraded_mode:
+        # Exit degraded mode when no source has consecutive failures
         _degraded_mode = False
         log.info("EXITING DEGRADED MODE — sources recovering")
         send_message(
@@ -194,9 +208,10 @@ def get_health_summary() -> dict:
             total = stats["success"] + stats["failure"]
             failure_rate = (stats["failure"] / total * 100) if total > 0 else 0
 
-            if failure_rate > 50:
+            consecutive = stats.get("consecutive_failures", 0)
+            if consecutive >= CONSECUTIVE_FAILURES_REQUIRED:
                 status = "down"
-            elif failure_rate > FAILURE_THRESHOLD_PCT:
+            elif consecutive > 0:
                 status = "degraded"
             else:
                 status = "healthy"
@@ -205,6 +220,7 @@ def get_health_summary() -> dict:
                 "success": stats["success"],
                 "failure": stats["failure"],
                 "failure_rate": round(failure_rate, 1),
+                "consecutive_failures": consecutive,
                 "last_success": stats["last_success"].isoformat() if stats["last_success"] else None,
                 "last_failure": stats["last_failure"].isoformat() if stats["last_failure"] else None,
                 "status": status,
@@ -228,5 +244,6 @@ def reset_stats():
     with _lock:
         _api_stats = defaultdict(lambda: {
             "success": 0, "failure": 0, "last_success": None, "last_failure": None,
+            "consecutive_failures": 0, "failure_timestamps": [],
         })
     log.info("API stats reset")

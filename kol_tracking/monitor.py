@@ -17,6 +17,9 @@ log = get_logger("kol_tracking.monitor")
 # SOL price cache (refreshed periodically)
 _sol_price_cache = {'price': 0, 'updated': 0}
 
+# Exit alert deduplication: {(wallet_id, token_address): timestamp}
+_exit_alert_sent: dict[tuple, float] = {}
+
 # Known program IDs
 TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 ASSOCIATED_TOKEN_PROGRAM = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
@@ -200,8 +203,11 @@ def _process_rpc_transaction(tx: dict, sig: str, wallet_id: int, name: str,
         # Get token symbol (cached)
         token_symbol = _get_token_symbol(mint)
 
-        # Apply conviction filter
-        is_conviction = (action == "buy" and amount_usd >= min_usd)
+        # Apply conviction filter — reject $0/None buys
+        is_conviction = (action == "buy"
+                         and amount_usd is not None
+                         and amount_usd > 0
+                         and amount_usd >= min_usd)
 
         # Log transaction
         try:
@@ -269,7 +275,14 @@ def _trigger_entry(token_address: str, token_symbol: str | None, kol_name: str,
 
 def _check_exit_signal(wallet_id: int, name: str, token_address: str,
                        token_symbol: str | None, sold_amount: float, tier: int):
-    """Check if this sell constitutes a major exit signal."""
+    """Check if this sell constitutes a major exit signal.
+
+    Tracks TOTAL bought vs TOTAL sold across ALL transactions for this
+    wallet+token pair.  Deduplicates alerts — skips if already sent for
+    this wallet+token in the last 5 minutes.
+    """
+    global _exit_alert_sent
+
     try:
         row = execute_one(
             """SELECT SUM(CASE WHEN action='buy' THEN token_amount ELSE 0 END) as total_bought,
@@ -278,22 +291,36 @@ def _check_exit_signal(wallet_id: int, name: str, token_address: str,
                WHERE kol_wallet_id = %s AND token_address = %s""",
             (wallet_id, token_address),
         )
-        if row and row[0] and row[0] > 0:
-            total_bought = float(row[0])
-            total_sold = float(row[1] or 0)
-            pct_sold = (total_sold / total_bought) * 100
+        if not row or not row[0] or float(row[0]) <= 0:
+            return
 
-            if pct_sold > 50 and tier <= 2:
-                log.warning("KOL EXIT SIGNAL: %s sold %.0f%% of %s",
-                            name, pct_sold, token_symbol or token_address[:12])
-                try:
-                    from telegram_bot.severity import route_alert
-                    msg = (f"🔴 <b>KOL EXIT SIGNAL</b>\n"
-                           f"👤 {name} sold {pct_sold:.0f}% of "
-                           f"{token_symbol or token_address[:12]}")
-                    route_alert(1, msg)
-                except Exception:
-                    pass
+        total_bought = float(row[0])
+        total_sold = float(row[1] or 0)
+        pct_sold = (total_sold / total_bought) * 100
+
+        if pct_sold > 50 and tier <= 2:
+            # Deduplicate: skip if we already sent for this wallet+token in last 5 min
+            dedup_key = (wallet_id, token_address)
+            now = time.time()
+            last_sent = _exit_alert_sent.get(dedup_key, 0)
+            if now - last_sent < 300:
+                log.debug("Skipping duplicate exit alert for %s/%s (sent %.0fs ago)",
+                          name, token_symbol or token_address[:12], now - last_sent)
+                return
+
+            _exit_alert_sent[dedup_key] = now
+
+            log.warning("KOL EXIT SIGNAL: %s sold %.0f%% of %s (bought=%.2f sold=%.2f)",
+                        name, pct_sold, token_symbol or token_address[:12],
+                        total_bought, total_sold)
+            try:
+                from telegram_bot.severity import route_alert
+                msg = (f"🔴 <b>KOL EXIT SIGNAL</b>\n"
+                       f"👤 {name} sold {pct_sold:.0f}% of "
+                       f"{token_symbol or token_address[:12]}")
+                route_alert(1, msg)
+            except Exception:
+                pass
     except Exception as e:
         log.debug("Exit signal check failed: %s", e)
 
