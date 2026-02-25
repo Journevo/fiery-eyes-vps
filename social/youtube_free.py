@@ -31,7 +31,7 @@ from telegram_bot.alerts import _send, send_message
 log = get_logger("social.youtube")
 
 CHANNELS_FILE = Path(__file__).parent / "youtube_channels.json"
-COOKIES_FILE = Path(__file__).parents[1] / "cookies.txt"
+COOKIES_FILE = Path(os.environ.get("YOUTUBE_COOKIES_FILE", str(Path(__file__).parents[1] / "cookies.txt")))
 RSS_URL = "https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
 YT_DLP = Path(__file__).parents[1] / "venv" / "bin" / "yt-dlp"
 
@@ -39,16 +39,17 @@ YT_DLP = Path(__file__).parents[1] / "venv" / "bin" / "yt-dlp"
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 SONNET_MODEL = "claude-sonnet-4-20250514"
 
-ANALYSIS_PROMPT = """You are a crypto investment analyst. Analyse this video transcript:
-1. THESIS: Main investment argument (2-3 sentences)
-2. TOKEN CALLS: Every specific token mentioned with sentiment (bullish/bearish/neutral), reasoning, price targets if given
-3. KEY INSIGHTS: Non-obvious alpha, data points, insider info
-4. MACRO VIEW: Market conditions view
-5. ACTION ITEMS: Specific actions recommended
-6. RISK WARNINGS: Risks mentioned
+ANALYSIS_PROMPT = """Analyze this crypto/markets video transcript. Extract as JSON:
+- title: video title
+- channel: channel name
+- summary: 2-3 sentence summary of key points
+- tokens_mentioned: [{symbol, sentiment (bullish/bearish/neutral), conviction (1-10), price_target (if mentioned)}]
+- key_insights: [list of actionable insights, max 5]
+- risk_warnings: [any warnings or bearish signals mentioned]
+- overall_outlook: bullish/bearish/neutral
+- relevance_score: 1-10 (how actionable is this for meme/DeFi trading)
 
-Respond ONLY in valid JSON (no markdown, no code fences):
-{"thesis": "...", "token_calls": [{"token": "BTC", "sentiment": "bullish", "reasoning": "...", "price_target": "$X"}], "key_insights": ["..."], "macro_view": "...", "action_items": ["..."], "risk_warnings": ["..."]}
+Respond ONLY in valid JSON (no markdown, no code fences).
 
 Transcript:
 """
@@ -156,7 +157,7 @@ def _fetch_rss(channel_id: str) -> list[dict]:
 def _is_processed(video_id: str) -> bool:
     """Check if video already processed."""
     row = execute_one(
-        "SELECT 1 FROM youtube_analysis WHERE video_id = %s", (video_id,)
+        "SELECT 1 FROM youtube_videos WHERE video_id = %s", (video_id,)
     )
     return row is not None
 
@@ -277,11 +278,111 @@ def _parse_vtt(vtt_text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# YouTube Data API metadata fallback
+# ---------------------------------------------------------------------------
+
+def _fetch_video_metadata(video_id: str) -> dict | None:
+    """Fetch video snippet (title, description) via YouTube Data API."""
+    api_key = os.environ.get("YOUTUBE_API_KEY") or ""
+    if not api_key:
+        return None
+    try:
+        resp = requests.get(
+            "https://www.googleapis.com/youtube/v3/videos",
+            params={"id": video_id, "part": "snippet", "key": api_key},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        items = resp.json().get("items", [])
+        if items:
+            snippet = items[0]["snippet"]
+            return {
+                "title": snippet.get("title", ""),
+                "description": snippet.get("description", ""),
+                "channel_title": snippet.get("channelTitle", ""),
+            }
+    except Exception as e:
+        log.debug("YouTube Data API failed for %s: %s", video_id, e)
+    return None
+
+
+METADATA_ANALYSIS_PROMPT = """Analyze this crypto/markets YouTube video based on its title and description only (no transcript available).
+Extract as JSON:
+- summary: 1-2 sentence summary based on title/description
+- tokens_mentioned: [{{symbol, sentiment (bullish/bearish/neutral), conviction (1-5), price_target (if mentioned)}}]
+- key_insights: [up to 3 insights inferrable from title/description]
+- risk_warnings: [any warnings apparent from title/description]
+- overall_outlook: bullish/bearish/neutral
+- relevance_score: 1-10 (how actionable for meme/DeFi trading — cap at 5 since no transcript)
+
+Respond ONLY in valid JSON (no markdown, no code fences).
+
+Channel: {channel}
+Title: {title}
+Description:
+{description}
+"""
+
+
+def _analyse_metadata(title: str, description: str, channel_name: str) -> dict | None:
+    """Lightweight Claude analysis from video title + description only."""
+    if not ANTHROPIC_API_KEY:
+        log.error("ANTHROPIC_API_KEY not set — cannot analyse metadata")
+        return None
+
+    # Truncate long descriptions
+    if len(description) > 4000:
+        description = description[:4000] + "\n[DESCRIPTION TRUNCATED]"
+
+    prompt_text = METADATA_ANALYSIS_PROMPT.format(
+        channel=channel_name, title=title, description=description,
+    )
+
+    for attempt in range(3):
+        try:
+            resp = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": ANTHROPIC_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": HAIKU_MODEL,
+                    "max_tokens": 1500,
+                    "messages": [{"role": "user", "content": prompt_text}],
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            text = data["content"][0]["text"]
+            text = re.sub(r"^```json\s*", "", text.strip())
+            text = re.sub(r"\s*```$", "", text.strip())
+
+            return json.loads(text)
+        except json.JSONDecodeError as e:
+            log.error("Claude returned invalid JSON for metadata (attempt %d): %s", attempt + 1, e)
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+                continue
+            return None
+        except Exception as e:
+            log.error("Claude metadata analysis failed (attempt %d): %s", attempt + 1, e)
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+                continue
+            return None
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Claude AI analysis
 # ---------------------------------------------------------------------------
 
 def _analyse_transcript(transcript: str, video_title: str = "") -> dict | None:
-    """Send transcript to Claude Haiku for analysis."""
+    """Send transcript to Claude Haiku for analysis with retry."""
     if not ANTHROPIC_API_KEY:
         log.error("ANTHROPIC_API_KEY not set — cannot analyse")
         return None
@@ -295,36 +396,44 @@ def _analyse_transcript(transcript: str, video_title: str = "") -> dict | None:
     if video_title:
         prompt_text = f"Video title: {video_title}\n\n" + prompt_text
 
-    try:
-        resp = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": HAIKU_MODEL,
-                "max_tokens": 2000,
-                "messages": [{"role": "user", "content": prompt_text}],
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    for attempt in range(3):
+        try:
+            resp = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": ANTHROPIC_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": HAIKU_MODEL,
+                    "max_tokens": 2000,
+                    "messages": [{"role": "user", "content": prompt_text}],
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
-        text = data["content"][0]["text"]
-        # Strip markdown code fences if present
-        text = re.sub(r"^```json\s*", "", text.strip())
-        text = re.sub(r"\s*```$", "", text.strip())
+            text = data["content"][0]["text"]
+            # Strip markdown code fences if present
+            text = re.sub(r"^```json\s*", "", text.strip())
+            text = re.sub(r"\s*```$", "", text.strip())
 
-        return json.loads(text)
-    except json.JSONDecodeError as e:
-        log.error("Claude returned invalid JSON: %s", e)
-        return None
-    except Exception as e:
-        log.error("Claude analysis failed: %s", e)
-        return None
+            return json.loads(text)
+        except json.JSONDecodeError as e:
+            log.error("Claude returned invalid JSON (attempt %d): %s", attempt + 1, e)
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+                continue
+            return None
+        except Exception as e:
+            log.error("Claude analysis failed (attempt %d): %s", attempt + 1, e)
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+                continue
+            return None
+    return None
 
 
 def _synthesise_digest(analyses: list[dict]) -> dict | None:
@@ -336,12 +445,13 @@ def _synthesise_digest(analyses: list[dict]) -> dict | None:
     analysis_text = ""
     for a in analyses:
         analysis_text += f"\n--- {a['channel_name']}: '{a['video_title']}' ---\n"
+        aj = a.get("analysis_json") or {}
         analysis_text += json.dumps({
-            "thesis": a.get("thesis", ""),
-            "token_calls": a.get("token_calls", []),
-            "key_insights": a.get("key_insights", []),
-            "macro_view": a.get("macro_view", ""),
-            "risk_warnings": a.get("risk_warnings", []),
+            "summary": aj.get("summary", ""),
+            "tokens_mentioned": aj.get("tokens_mentioned", []),
+            "key_insights": aj.get("key_insights", []),
+            "overall_outlook": aj.get("overall_outlook", ""),
+            "risk_warnings": aj.get("risk_warnings", []),
         }, indent=1)
         analysis_text += "\n"
 
@@ -382,66 +492,74 @@ def _synthesise_digest(analyses: list[dict]) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def _score_relevance(analysis: dict) -> int:
-    """Score video relevance 0-100 based on actionable content."""
+    """Score video relevance 0-100.
+
+    Uses Claude's relevance_score (1-10) scaled to 0-100.
+    Falls back to heuristic if Claude didn't provide one.
+    """
+    claude_score = analysis.get("relevance_score")
+    if claude_score is not None:
+        try:
+            return min(100, max(0, int(float(claude_score) * 10)))
+        except (ValueError, TypeError):
+            pass
+
+    # Fallback heuristic
     score = 0
-    calls = analysis.get("token_calls", [])
-    score += min(40, len(calls) * 10)
+    tokens = analysis.get("tokens_mentioned", [])
+    score += min(40, len(tokens) * 10)
 
     insights = analysis.get("key_insights", [])
     score += min(20, len(insights) * 7)
 
-    actions = analysis.get("action_items", [])
-    score += min(20, len(actions) * 10)
-
-    if analysis.get("thesis"):
-        score += 10
-    if analysis.get("macro_view"):
-        score += 10
+    if analysis.get("summary"):
+        score += 20
+    if analysis.get("overall_outlook"):
+        score += 20
 
     return min(100, score)
 
 
 def _cross_reference_tokens(analysis: dict):
-    """Cross-reference token calls against system data.
+    """Cross-reference token mentions against system data.
     Auto-add to momentum watchlist if mentioned by 2+ channels and not tracked."""
-    calls = analysis.get("token_calls", [])
-    for call in calls:
-        token = call.get("token", "").upper()
-        if not token or len(token) < 2:
+    tokens = analysis.get("tokens_mentioned", [])
+    for tok in tokens:
+        symbol = (tok.get("symbol") or "").upper()
+        if not symbol or len(symbol) < 2:
             continue
 
         # Check if already tracked
         row = execute_one(
             "SELECT id, quality_gate_pass FROM tokens WHERE UPPER(symbol) = %s",
-            (token,),
+            (symbol,),
         )
         if row:
-            call["system_tracked"] = True
-            call["gate_pass"] = row[1]
-            # Get latest score
+            tok["system_tracked"] = True
+            tok["gate_pass"] = row[1]
             score_row = execute_one(
                 """SELECT final_score, momentum_score, adoption_score
                    FROM scores_daily WHERE token_id = %s AND date = CURRENT_DATE""",
                 (row[0],),
             )
             if score_row:
-                call["system_score"] = {
+                tok["system_score"] = {
                     "final": score_row[0],
                     "momentum": score_row[1],
                     "adoption": score_row[2],
                 }
         else:
-            call["system_tracked"] = False
+            tok["system_tracked"] = False
 
             # Check if mentioned by 2+ channels in last 48h
             mention_row = execute_one(
-                """SELECT COUNT(DISTINCT channel_name) FROM youtube_analysis
-                   WHERE token_calls @> %s::jsonb
+                """SELECT COUNT(DISTINCT channel_name) FROM youtube_videos
+                   WHERE tokens_mentioned @> %s::jsonb
                      AND published_at >= NOW() - INTERVAL '48 hours'""",
-                (json.dumps([{"token": token}]),),
+                (json.dumps([{"symbol": symbol}]),),
             )
             if mention_row and mention_row[0] >= 2:
-                _auto_add_to_watchlist(token)
+                _auto_add_to_watchlist(symbol)
 
 
 def _auto_add_to_watchlist(token_symbol: str):
@@ -483,41 +601,44 @@ def _send_video_alert(channel_name: str, video_title: str, video_url: str,
                       published_at: datetime | None, analysis: dict):
     """Send individual video analysis alert to Telegram."""
     time_ago = _format_time_ago(published_at)
+    outlook = analysis.get("overall_outlook", "neutral")
+    outlook_icon = {"bullish": "🟢", "bearish": "🔴"}.get(outlook, "🟡")
 
     lines = [
         "📺 <b>NEW VIDEO ANALYSIS</b>",
         f"📢 {channel_name} — {time_ago}",
         f"🎬 '{video_title}'",
-        "",
     ]
+    if analysis.get("_partial"):
+        lines.append("⚠️ <i>Partial (no transcript)</i>")
+    lines.append(f"{outlook_icon} Outlook: {outlook}")
+    lines.append("")
 
-    # Thesis
-    thesis = analysis.get("thesis", "")
-    if thesis:
-        lines.append("📝 <b>THESIS</b>")
-        lines.append(thesis)
+    # Summary
+    summary = analysis.get("summary", "")
+    if summary:
+        lines.append("📝 <b>SUMMARY</b>")
+        lines.append(summary)
         lines.append("")
 
-    # Token calls
-    calls = analysis.get("token_calls", [])
-    if calls:
-        lines.append("🪙 <b>TOKEN CALLS</b>")
-        for call in calls:
-            token = call.get("token", "?")
-            sentiment = call.get("sentiment", "neutral").lower()
-            reasoning = call.get("reasoning", "")
-            target = call.get("price_target", "")
+    # Token mentions
+    tokens = analysis.get("tokens_mentioned", [])
+    if tokens:
+        lines.append("🪙 <b>TOKENS MENTIONED</b>")
+        for tok in tokens:
+            symbol = tok.get("symbol", "?")
+            sentiment = (tok.get("sentiment") or "neutral").lower()
+            conviction = tok.get("conviction", "?")
+            target = tok.get("price_target", "")
 
             icon = {"bullish": "🟢", "bearish": "🔴"}.get(sentiment, "🟡")
-            parts = [f"{icon} <b>{token}</b> — {sentiment.title()}"]
-            if reasoning:
-                parts.append(f"'{reasoning[:100]}'")
+            parts = [f"{icon} <b>{symbol}</b> — {sentiment.title()} (conv: {conviction}/10)"]
             if target:
                 parts.append(f"Target: {target}")
 
             # System cross-reference
-            if call.get("system_tracked"):
-                sys_score = call.get("system_score", {})
+            if tok.get("system_tracked"):
+                sys_score = tok.get("system_score", {})
                 if sys_score:
                     parts.append(f"[System: {sys_score.get('final', 0):.0f}/100]")
 
@@ -530,14 +651,6 @@ def _send_video_alert(channel_name: str, video_title: str, video_url: str,
         lines.append("💡 <b>KEY INSIGHTS</b>")
         for ins in insights[:5]:
             lines.append(f"  • {ins}")
-        lines.append("")
-
-    # Action items
-    actions = analysis.get("action_items", [])
-    if actions:
-        lines.append("🎯 <b>ACTION ITEMS</b>")
-        for act in actions[:3]:
-            lines.append(f"  • {act}")
         lines.append("")
 
     # Risks
@@ -555,7 +668,6 @@ def _send_video_alert(channel_name: str, video_title: str, video_url: str,
 
 def _send_daily_digest(digest: dict, analyses: list[dict]):
     """Send daily digest alert to Telegram."""
-    now = datetime.now(timezone.utc)
     channels = set(a["channel_name"] for a in analyses)
 
     lines = [
@@ -666,44 +778,58 @@ def process_video(channel_name: str, video: dict) -> dict | None:
 
     log.info("Processing: %s — '%s'", channel_name, video_title)
 
-    # Download captions
+    # 1. Try transcript download (transcript-api + yt-dlp captions)
     transcript = _download_captions(video_url, video_id)
-    if not transcript or len(transcript) < 100:
-        log.info("No usable captions for %s — skipping", video_id)
-        return None
+    partial = False
 
-    log.info("Got transcript: %d chars for %s", len(transcript), video_id)
+    if transcript and len(transcript) >= 100:
+        # Full analysis
+        log.info("Got transcript: %d chars for %s", len(transcript), video_id)
+        analysis = _analyse_transcript(transcript, video_title)
+    else:
+        # 2. Fallback: YouTube Data API for metadata
+        log.info("No transcript for %s — trying metadata fallback", video_id)
+        meta = _fetch_video_metadata(video_id)
+        description = meta["description"] if meta else ""
+        if meta and len(description) >= 50:
+            analysis = _analyse_metadata(video_title, description, channel_name)
+            transcript = None
+            partial = True
+        else:
+            log.info("No usable content for %s — skipping", video_id)
+            return None
 
-    # Analyse with Claude
-    analysis = _analyse_transcript(transcript, video_title)
     if not analysis:
         log.warning("Analysis failed for %s", video_id)
         return None
 
-    # Score relevance
+    # Mark partial analyses
+    if partial:
+        analysis["_partial"] = True
+
+    # Score relevance — partial analyses capped at 50
     relevance = _score_relevance(analysis)
+    if partial:
+        relevance = min(relevance, 50)
 
     # Cross-reference tokens
     _cross_reference_tokens(analysis)
 
     # Store in DB
+    tokens_mentioned = analysis.get("tokens_mentioned", [])
     try:
         execute(
-            """INSERT INTO youtube_analysis
-               (video_id, channel_name, video_title, published_at, video_url,
-                thesis, token_calls, key_insights, macro_view,
-                action_items, risk_warnings, relevance_score, alerted_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            """INSERT INTO youtube_videos
+               (video_id, channel_name, title, published_at,
+                transcript_text, analysis_json, relevance_score, tokens_mentioned)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                ON CONFLICT (video_id) DO NOTHING""",
             (
-                video_id, channel_name, video_title, published_at, video_url,
-                analysis.get("thesis"),
-                json.dumps(analysis.get("token_calls", [])),
-                json.dumps(analysis.get("key_insights", [])),
-                analysis.get("macro_view"),
-                json.dumps(analysis.get("action_items", [])),
-                json.dumps(analysis.get("risk_warnings", [])),
+                video_id, channel_name, video_title, published_at,
+                transcript[:5000] if transcript else None,
+                json.dumps(analysis),
                 relevance,
+                json.dumps(tokens_mentioned),
             ),
         )
     except Exception as e:
@@ -723,7 +849,12 @@ def process_video(channel_name: str, video: dict) -> dict | None:
 def run_youtube_scan():
     """Main entry: scan all channels for new videos, process each."""
     log.info("=== YouTube Channel Scan ===")
-    channels = load_channels()
+
+    # Use tier-based config, resolve any missing channel IDs
+    from youtube.channels import get_active_channels, ensure_channel_ids
+    ensure_channel_ids()
+    channels = get_active_channels()
+
     if not channels:
         log.warning("No channels configured")
         return []
@@ -731,7 +862,10 @@ def run_youtube_scan():
     results = []
     for ch in channels:
         name = ch["name"]
-        channel_id = ch["channel_id"]
+        channel_id = ch.get("channel_id")
+        if not channel_id:
+            log.debug("Skipping %s — no channel_id", name)
+            continue
 
         videos = _fetch_rss(channel_id)
         log.info("%s: %d videos in feed", name, len(videos))
@@ -769,10 +903,8 @@ def run_daily_digest():
     # Fetch all analyses from last 24h
     try:
         rows = execute(
-            """SELECT channel_name, video_title, video_url, published_at,
-                      thesis, token_calls, key_insights, macro_view,
-                      action_items, risk_warnings, relevance_score
-               FROM youtube_analysis
+            """SELECT channel_name, title, analysis_json, relevance_score
+               FROM youtube_videos
                WHERE published_at >= NOW() - INTERVAL '24 hours'
                ORDER BY relevance_score DESC""",
             fetch=True,
@@ -787,18 +919,12 @@ def run_daily_digest():
 
     analyses = []
     for row in rows:
+        aj = row[2] if isinstance(row[2], dict) else json.loads(row[2] or "{}")
         analyses.append({
             "channel_name": row[0],
             "video_title": row[1],
-            "video_url": row[2],
-            "published_at": row[3],
-            "thesis": row[4],
-            "token_calls": row[5] if isinstance(row[5], list) else json.loads(row[5] or "[]"),
-            "key_insights": row[6] if isinstance(row[6], list) else json.loads(row[6] or "[]"),
-            "macro_view": row[7],
-            "action_items": row[8] if isinstance(row[8], list) else json.loads(row[8] or "[]"),
-            "risk_warnings": row[9] if isinstance(row[9], list) else json.loads(row[9] or "[]"),
-            "relevance_score": row[10],
+            "analysis_json": aj,
+            "relevance_score": row[3],
         })
 
     log.info("Synthesising digest from %d analyses", len(analyses))
@@ -833,8 +959,8 @@ def get_latest_digest_text() -> str:
     """Get the latest digest for /youtube command."""
     try:
         rows = execute(
-            """SELECT channel_name, video_title, thesis, token_calls, relevance_score
-               FROM youtube_analysis
+            """SELECT channel_name, title, analysis_json, relevance_score
+               FROM youtube_videos
                WHERE published_at >= NOW() - INTERVAL '24 hours'
                ORDER BY relevance_score DESC
                LIMIT 10""",
@@ -844,15 +970,17 @@ def get_latest_digest_text() -> str:
             return "📺 No YouTube analyses in the last 24 hours."
 
         lines = [f"📺 <b>Latest YouTube Intelligence</b> — {len(rows)} videos", ""]
-        for i, (ch, title, thesis, calls, score) in enumerate(rows[:5], 1):
+        for i, (ch, title, analysis, score) in enumerate(rows[:5], 1):
+            aj = analysis if isinstance(analysis, dict) else json.loads(analysis or "{}")
             lines.append(f"{i}. <b>{ch}</b>: '{title}'")
-            if thesis:
-                lines.append(f"   {thesis[:150]}")
-            if calls:
-                call_list = calls if isinstance(calls, list) else json.loads(calls or "[]")
-                tokens = [c.get("token", "") for c in call_list if c.get("token")]
-                if tokens:
-                    lines.append(f"   Tokens: {', '.join(tokens[:5])}")
+            summary = aj.get("summary", "")
+            if summary:
+                lines.append(f"   {summary[:150]}")
+            tokens = aj.get("tokens_mentioned", [])
+            if tokens:
+                symbols = [t.get("symbol", "") for t in tokens if t.get("symbol")]
+                if symbols:
+                    lines.append(f"   Tokens: {', '.join(symbols[:5])}")
             lines.append("")
 
         return "\n".join(lines)
@@ -872,7 +1000,7 @@ def youtube_report_section() -> list[str]:
         # Count videos in last 24h
         row = execute_one(
             """SELECT COUNT(*), COUNT(DISTINCT channel_name)
-               FROM youtube_analysis
+               FROM youtube_videos
                WHERE published_at >= NOW() - INTERVAL '24 hours'"""
         )
         if row and row[0] > 0:
@@ -880,11 +1008,11 @@ def youtube_report_section() -> list[str]:
 
             # Most mentioned tokens
             token_rows = execute(
-                """SELECT elem->>'token' as token, COUNT(*) as cnt
-                   FROM youtube_analysis,
-                        jsonb_array_elements(token_calls) elem
+                """SELECT elem->>'symbol' as symbol, COUNT(*) as cnt
+                   FROM youtube_videos,
+                        jsonb_array_elements(tokens_mentioned) elem
                    WHERE published_at >= NOW() - INTERVAL '24 hours'
-                   GROUP BY elem->>'token'
+                   GROUP BY elem->>'symbol'
                    ORDER BY cnt DESC
                    LIMIT 5""",
                 fetch=True,
@@ -896,8 +1024,8 @@ def youtube_report_section() -> list[str]:
             # Sentiment breakdown
             sentiment_rows = execute(
                 """SELECT elem->>'sentiment' as sent, COUNT(*) as cnt
-                   FROM youtube_analysis,
-                        jsonb_array_elements(token_calls) elem
+                   FROM youtube_videos,
+                        jsonb_array_elements(tokens_mentioned) elem
                    WHERE published_at >= NOW() - INTERVAL '24 hours'
                    GROUP BY elem->>'sentiment'""",
                 fetch=True,
