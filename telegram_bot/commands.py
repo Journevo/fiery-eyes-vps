@@ -1,10 +1,17 @@
 """Telegram Bot Commands — interactive command handler.
 
 Commands:
+  /menu              — show all commands
   /scan <address>    — scan a token through Quality Gate
+  /gate <address>    — gate scan (always shows result)
   /dd <address>      — generate Due Diligence card
   /regime            — current regime multiplier and components
   /top               — top 5 tokens by final score
+  /health <addr|$SYM>— token health score
+  /shadow            — shadow trading report
+  /open              — open shadow trades
+  /positions         — positions sorted by health score
+  /kol               — recent KOL activity
   /status            — system health summary
   /portfolio         — current position summary
   /watch <track> <symbol> <contract> [name]  — add token to watchlist
@@ -15,6 +22,9 @@ Commands:
   /stages                                    — lifecycle stage summary
   /unlocks [symbol]                          — upcoming token unlocks
   /buybacks [symbol]                         — buyback/burn data
+  /youtube                                   — latest YouTube intelligence
+  /addchannel <url> [name]                   — add YouTube channel
+  /channels                                  — list YouTube channels
 """
 
 import threading
@@ -247,6 +257,21 @@ def _handle_status():
 
         lines = ["🔧 <b>SYSTEM STATUS</b>", ""]
 
+        # Uptime
+        try:
+            import time as _time
+            from health import _start_time
+            uptime_sec = int(_time.time() - _start_time)
+            days, rem = divmod(uptime_sec, 86400)
+            hours, rem = divmod(rem, 3600)
+            mins = rem // 60
+            if days:
+                lines.append(f"Uptime: {days}d {hours}h {mins}m")
+            else:
+                lines.append(f"Uptime: {hours}h {mins}m")
+        except Exception:
+            pass
+
         # Database
         db_ok = is_healthy()
         lines.append(f"Database: {'🟢 Connected' if db_ok else '🔴 Disconnected'}")
@@ -266,6 +291,14 @@ def _handle_status():
                     status_icon = {"healthy": "🟢", "degraded": "🟡", "down": "🔴"}.get(
                         info["status"], "⚪")
                     lines.append(f"  {status_icon} {name}: {info['status']} ({info['failure_rate']:.0f}% fail)")
+
+            # Last run timestamps
+            last_runs = summary.get("last_runs", {})
+            if last_runs:
+                lines.append("")
+                lines.append("<b>Last Runs:</b>")
+                for task_name, ts in last_runs.items():
+                    lines.append(f"  {task_name}: {ts}")
         except Exception:
             lines.append("Mode: 🟢 Normal")
 
@@ -672,14 +705,385 @@ def _handle_buybacks(args: str):
 
 
 # ---------------------------------------------------------------------------
+# New commands: menu, shadow, open, health, kol, positions, gate
+# ---------------------------------------------------------------------------
+
+
+def _handle_menu():
+    """Handle /menu command — show all available commands."""
+    text = (
+        "📋 <b>FIERY EYES — COMMAND MENU</b>\n"
+        "\n"
+        "<b>🔍 Scanning &amp; DD</b>\n"
+        "  /scan &lt;address&gt; — Quality Gate scan\n"
+        "  /gate &lt;address&gt; — Gate scan (always shows result)\n"
+        "  /dd &lt;address&gt; — Due Diligence card\n"
+        "\n"
+        "<b>📊 Market &amp; Scoring</b>\n"
+        "  /top — Top 5 tokens by score\n"
+        "  /regime — Current regime status\n"
+        "  /health &lt;address|$SYM&gt; — Token health score\n"
+        "\n"
+        "<b>👁 Shadow Trading</b>\n"
+        "  /shadow — Shadow trading report\n"
+        "  /open — Open shadow trades\n"
+        "  /positions — Positions by health score\n"
+        "\n"
+        "<b>🐋 KOL Tracking</b>\n"
+        "  /kol — Recent KOL activity\n"
+        "\n"
+        "<b>💼 Portfolio &amp; Positions</b>\n"
+        "  /portfolio — Portfolio summary\n"
+        "\n"
+        "<b>📝 Watchlists &amp; Lifecycle</b>\n"
+        "  /watch &lt;track&gt; &lt;sym&gt; &lt;addr&gt; — Add to watchlist\n"
+        "  /unwatch &lt;track&gt; &lt;sym&gt; — Remove from watchlist\n"
+        "  /watchlist [track] — Show watchlist\n"
+        "  /promote &lt;address&gt; — Promote lifecycle stage\n"
+        "  /lifecycle &lt;address&gt; — Token lifecycle info\n"
+        "  /stages — Lifecycle stage summary\n"
+        "\n"
+        "<b>📈 Market Intel</b>\n"
+        "  /unlocks [symbol] — Token unlock schedule\n"
+        "  /buybacks [symbol] — Buyback/burn data\n"
+        "\n"
+        "<b>📺 Social</b>\n"
+        "  /youtube — Latest YouTube intelligence\n"
+        "  /addchannel &lt;url&gt; [name] — Add YouTube channel\n"
+        "  /channels — List YouTube channels\n"
+        "\n"
+        "<b>🔧 System</b>\n"
+        "  /status — System health\n"
+        "  /menu — This menu\n"
+    )
+    _send(text)
+
+
+def _handle_shadow():
+    """Handle /shadow command — shadow trading report."""
+    try:
+        from shadow.tracker import get_shadow_report
+        text = get_shadow_report()
+        _send(text)
+    except Exception as e:
+        log.error("/shadow error: %s", e)
+        _send(f"⚠️ Shadow report failed: {e}")
+
+
+def _handle_open():
+    """Handle /open command — open shadow trades with PnL."""
+    try:
+        from db.connection import execute
+        from datetime import datetime, timezone
+
+        rows = execute(
+            """SELECT token_symbol, token_address, entry_price, current_price,
+                      current_pnl_pct, entry_health_score, current_health_score,
+                      entry_time, position_size_pct
+               FROM shadow_trades
+               WHERE status = 'open'
+               ORDER BY entry_time DESC""",
+            fetch=True,
+        )
+
+        if not rows:
+            _send("👻 No open shadow trades.")
+            return
+
+        lines = [f"👻 <b>OPEN SHADOW TRADES</b> ({len(rows)})", ""]
+        for row in rows:
+            sym, addr, ep, cp, pnl, ehs, chs, etime, size = row
+            sym = sym or (addr[:8] + "…" if addr else "?")
+            pnl_str = f"{float(pnl):+.1f}%" if pnl is not None else "—"
+            pnl_icon = "🟢" if pnl and float(pnl) >= 0 else "🔴"
+
+            # Age
+            age = ""
+            if etime:
+                dt = etime.replace(tzinfo=timezone.utc) if etime.tzinfo is None else etime
+                delta = datetime.now(timezone.utc) - dt
+                hours = delta.total_seconds() / 3600
+                if hours >= 24:
+                    age = f"{hours / 24:.0f}d"
+                else:
+                    age = f"{hours:.0f}h"
+
+            lines.append(f"{pnl_icon} <b>{sym}</b> — {pnl_str}")
+            parts = []
+            if ep:
+                parts.append(f"Entry: {_fmt_usd(float(ep))}")
+            if cp:
+                parts.append(f"Now: {_fmt_usd(float(cp))}")
+            if age:
+                parts.append(f"Age: {age}")
+            if chs is not None:
+                parts.append(f"Health: {float(chs):.0f}")
+            if size:
+                parts.append(f"Size: {float(size):.1f}%")
+            if parts:
+                lines.append(f"   {' | '.join(parts)}")
+            lines.append("")
+
+        _send("\n".join(lines))
+    except Exception as e:
+        log.error("/open error: %s", e)
+        _send(f"⚠️ Open trades lookup failed: {e}")
+
+
+def _handle_health(args: str):
+    """Handle /health <address|$SYM> command — token health score."""
+    arg = args.strip()
+    if not arg:
+        _send("Usage: /health &lt;token_address&gt; or /health $SYMBOL\n"
+              "Example: /health $WIF")
+        return
+
+    try:
+        token_address = arg
+        token_symbol = None
+
+        # Resolve $SYMBOL to address
+        if arg.startswith("$"):
+            symbol = arg[1:].upper()
+            from db.connection import execute_one
+            row = execute_one(
+                "SELECT contract_address, symbol FROM tokens "
+                "WHERE UPPER(symbol) = %s LIMIT 1",
+                (symbol,),
+            )
+            if not row:
+                _send(f"⚠️ Symbol <code>${symbol}</code> not found in database.")
+                return
+            token_address = row[0]
+            token_symbol = row[1]
+
+        if len(token_address) < 32:
+            _send("⚠️ Invalid address. Use a token address or $SYMBOL.")
+            return
+
+        _send(f"🏥 Scoring <code>{token_symbol or token_address[:12]}…</code>...")
+
+        from health_score.engine import score_token, SIGNAL_WEIGHTS
+        result = score_token(token_address, token_symbol)
+
+        score = result.get("scaled_score", 0)
+        conf = result.get("confidence_pct", 0)
+        action = result.get("recommended_action", "?")
+        tier = result.get("token_tier", "?")
+
+        action_icons = {
+            "add": "🟢 ADD", "hold": "🔵 HOLD", "cooling": "🟡 COOLING",
+            "trim": "🟠 TRIM", "exit": "🔴 EXIT", "dead": "💀 DEAD",
+        }
+        action_display = action_icons.get(action, action.upper())
+        if action.endswith("_untrusted"):
+            base = action.replace("_untrusted", "")
+            action_display = action_icons.get(base, base.upper()) + " ⚠️"
+
+        lines = [
+            f"🏥 <b>HEALTH SCORE: {token_symbol or token_address[:12]}</b>",
+            "",
+            f"Score: <b>{score:.0f}/100</b>",
+            f"Confidence: {conf:.0f}%",
+            f"Action: {action_display}",
+            f"Tier: {tier}",
+            "",
+            "<b>Signal Breakdown:</b>",
+        ]
+
+        signal_keys = [
+            ("volume_score", "volume", "Volume"),
+            ("price_score", "price", "Price"),
+            ("kol_score", "kol", "KOL"),
+            ("social_score", "social", "Social"),
+            ("holder_score", "holders", "Holders"),
+        ]
+        for score_key, weight_key, label in signal_keys:
+            val = result.get(score_key, 0)
+            max_val = SIGNAL_WEIGHTS.get(weight_key, 0)
+            state = result.get(f"{weight_key}_data_state", "missing")
+            state_icon = {"live": "🟢", "stale": "🟡", "missing": "🔴"}.get(state, "⚪")
+            lines.append(f"  {state_icon} {label}: {val:.0f}/{max_val} ({state})")
+
+        _send("\n".join(lines))
+    except Exception as e:
+        log.error("/health error: %s", e)
+        _send(f"⚠️ Health score failed: {e}")
+
+
+def _handle_kol():
+    """Handle /kol command — recent KOL activity."""
+    try:
+        from db.connection import execute
+        from datetime import datetime, timezone
+
+        rows = execute(
+            """SELECT kt.token_symbol, kt.action, kt.amount_usd,
+                      kt.is_conviction_buy, kt.detected_at,
+                      kw.name
+               FROM kol_transactions kt
+               JOIN kol_wallets kw ON kw.id = kt.kol_wallet_id
+               ORDER BY kt.detected_at DESC
+               LIMIT 10""",
+            fetch=True,
+        )
+
+        if not rows:
+            _send("🐋 No KOL activity recorded yet.")
+            return
+
+        lines = ["🐋 <b>RECENT KOL ACTIVITY</b>", ""]
+        for sym, action, usd, conviction, detected_at, kol_name in rows:
+            sym = sym or "?"
+            action_icon = "🟢" if action == "buy" else "🔴"
+            conv_flag = " 🔥" if conviction else ""
+            usd_str = _fmt_usd(float(usd)) if usd else "?"
+
+            # Time ago
+            ago = ""
+            if detected_at:
+                dt = detected_at.replace(tzinfo=timezone.utc) if detected_at.tzinfo is None else detected_at
+                delta = datetime.now(timezone.utc) - dt
+                mins = delta.total_seconds() / 60
+                if mins < 60:
+                    ago = f"{mins:.0f}m ago"
+                elif mins < 1440:
+                    ago = f"{mins / 60:.0f}h ago"
+                else:
+                    ago = f"{mins / 1440:.0f}d ago"
+
+            lines.append(
+                f"{action_icon} <b>{sym}</b> {action.upper()} {usd_str}{conv_flag}"
+                f"\n   {kol_name} — {ago}"
+            )
+            lines.append("")
+
+        _send("\n".join(lines))
+    except Exception as e:
+        log.error("/kol error: %s", e)
+        _send(f"⚠️ KOL activity lookup failed: {e}")
+
+
+def _handle_positions():
+    """Handle /positions command — open shadow trades sorted by health score."""
+    try:
+        from db.connection import execute
+
+        rows = execute(
+            """SELECT token_symbol, token_address, current_pnl_pct,
+                      entry_health_score, current_health_score
+               FROM shadow_trades
+               WHERE status = 'open'
+               ORDER BY current_health_score DESC NULLS LAST""",
+            fetch=True,
+        )
+
+        if not rows:
+            _send("📊 No open shadow positions.")
+            return
+
+        lines = [f"📊 <b>POSITIONS BY HEALTH</b> ({len(rows)})", ""]
+        for sym, addr, pnl, ehs, chs in rows:
+            sym = sym or (addr[:8] + "…" if addr else "?")
+            pnl_str = f"{float(pnl):+.1f}%" if pnl is not None else "—"
+            pnl_icon = "🟢" if pnl and float(pnl) >= 0 else "🔴"
+
+            # Health trend
+            trend = ""
+            if ehs is not None and chs is not None:
+                diff = float(chs) - float(ehs)
+                if diff > 5:
+                    trend = " ↗️"
+                elif diff < -5:
+                    trend = " ↘️"
+                else:
+                    trend = " →"
+
+            health_str = f"{float(chs):.0f}" if chs is not None else "—"
+            entry_hs = f"{float(ehs):.0f}" if ehs is not None else "—"
+
+            lines.append(
+                f"{pnl_icon} <b>{sym}</b> — PnL: {pnl_str} | "
+                f"Health: {health_str}{trend} (was {entry_hs})"
+            )
+
+        _send("\n".join(lines))
+    except Exception as e:
+        log.error("/positions error: %s", e)
+        _send(f"⚠️ Positions lookup failed: {e}")
+
+
+def _handle_gate(args: str):
+    """Handle /gate <address> command — gate scan that always shows result."""
+    mint = args.strip()
+    if not mint or len(mint) < 32:
+        _send("Usage: /gate &lt;token_address&gt;\n"
+              "Like /scan but always shows the result, even if rejected.")
+        return
+
+    _send(f"🚦 Running gate on <code>{mint}</code>...")
+
+    try:
+        from quality_gate.gate import run_gate
+        from telegram_bot.alerts import send_gate_result
+
+        result = run_gate(mint, category="meme")
+
+        # send_gate_result skips rejected tokens, so handle that case inline
+        sent = send_gate_result(result)
+        if not sent:
+            status = result.get("gate_status", "rejected")
+            failures = result.get("failures", [])
+            dex = result.get("dex_data", {})
+            sym = dex.get("baseToken", {}).get("symbol", "?") if dex else "?"
+
+            lines = [
+                f"🚦 <b>GATE: {sym}</b> — <b>{status.upper()}</b>",
+                "",
+            ]
+            if failures:
+                lines.append("<b>Failures:</b>")
+                for f in failures:
+                    lines.append(f"  ❌ {f}")
+
+            # Show market data if available
+            if dex:
+                price = dex.get("priceUsd")
+                mcap = dex.get("marketCap") or dex.get("fdv")
+                vol = (dex.get("volume") or {}).get("h24")
+                market_parts = []
+                if price:
+                    market_parts.append(f"Price: ${price}")
+                if mcap:
+                    market_parts.append(f"MCap: {_fmt_usd(float(mcap))}")
+                if vol:
+                    market_parts.append(f"24h Vol: {_fmt_usd(float(vol))}")
+                if market_parts:
+                    lines.append("")
+                    lines.append(" | ".join(market_parts))
+
+            _send("\n".join(lines))
+    except Exception as e:
+        log.error("/gate error: %s", e)
+        _send(f"⚠️ Gate scan failed: {e}")
+
+
+# ---------------------------------------------------------------------------
 # Command dispatcher
 # ---------------------------------------------------------------------------
 
 COMMANDS = {
+    "/menu": lambda _: _handle_menu(),
     "/scan": _handle_scan,
+    "/gate": _handle_gate,
     "/dd": _handle_dd,
     "/regime": lambda _: _handle_regime(),
     "/top": lambda _: _handle_top(),
+    "/health": _handle_health,
+    "/shadow": lambda _: _handle_shadow(),
+    "/open": lambda _: _handle_open(),
+    "/positions": lambda _: _handle_positions(),
+    "/kol": lambda _: _handle_kol(),
     "/status": lambda _: _handle_status(),
     "/portfolio": lambda _: _handle_portfolio(),
     "/watch": _handle_watch,
@@ -715,6 +1119,49 @@ def handle_command(text: str) -> bool:
     return False
 
 
+def _register_bot_commands():
+    """Register all bot commands with Telegram (sets the / menu)."""
+    import requests
+
+    commands = [
+        {"command": "menu", "description": "Show all commands"},
+        {"command": "scan", "description": "Quality Gate scan a token"},
+        {"command": "gate", "description": "Gate scan (always shows result)"},
+        {"command": "dd", "description": "Due Diligence card"},
+        {"command": "top", "description": "Top 5 tokens by score"},
+        {"command": "regime", "description": "Current regime status"},
+        {"command": "health", "description": "Token health score"},
+        {"command": "shadow", "description": "Shadow trading report"},
+        {"command": "open", "description": "Open shadow trades"},
+        {"command": "positions", "description": "Positions by health score"},
+        {"command": "kol", "description": "Recent KOL activity"},
+        {"command": "portfolio", "description": "Portfolio summary"},
+        {"command": "status", "description": "System health status"},
+        {"command": "watch", "description": "Add to watchlist"},
+        {"command": "unwatch", "description": "Remove from watchlist"},
+        {"command": "watchlist", "description": "Show watchlist"},
+        {"command": "promote", "description": "Promote lifecycle stage"},
+        {"command": "lifecycle", "description": "Token lifecycle info"},
+        {"command": "stages", "description": "Lifecycle stage summary"},
+        {"command": "unlocks", "description": "Token unlock schedule"},
+        {"command": "buybacks", "description": "Buyback/burn data"},
+        {"command": "youtube", "description": "Latest YouTube intel"},
+        {"command": "channels", "description": "List YouTube channels"},
+    ]
+    try:
+        resp = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setMyCommands",
+            json={"commands": commands},
+            timeout=10,
+        )
+        if resp.ok:
+            log.info("Registered %d bot commands with Telegram", len(commands))
+        else:
+            log.warning("setMyCommands failed: %s", resp.text)
+    except Exception as e:
+        log.warning("Failed to register bot commands: %s", e)
+
+
 def start_bot_polling():
     """Start polling for Telegram bot commands.
     Uses getUpdates long-polling (no webhook needed)."""
@@ -724,6 +1171,7 @@ def start_bot_polling():
         log.warning("Telegram bot token not configured — commands disabled")
         return
 
+    _register_bot_commands()
     log.info("Starting Telegram bot command polling...")
     offset = 0
 
