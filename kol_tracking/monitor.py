@@ -41,7 +41,7 @@ def _get_sol_price() -> float:
             return price
     except Exception:
         pass
-    return _sol_price_cache.get('price', 150)  # fallback
+    return _sol_price_cache['price'] or 150  # fallback
 
 
 def check_kol_wallets():
@@ -222,8 +222,9 @@ def _process_rpc_transaction(tx: dict, sig: str, wallet_id: int, name: str,
                          and amount_usd > 0
                          and amount_usd >= min_usd)
 
-        # Derive SOL amount from USD if we used token price
-        est_sol = amount_usd / sol_price if sol_price > 0 else sol_amount
+        # Derive SOL equivalent from USD (fallback to $150/SOL if price missing)
+        effective_sol_price = sol_price if sol_price > 0 else 150
+        est_sol = amount_usd / effective_sol_price
 
         # Log transaction
         try:
