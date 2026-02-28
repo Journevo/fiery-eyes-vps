@@ -25,6 +25,7 @@ INTERVAL_TIER1_KOL = 60
 INTERVAL_TIER2_KOL = 300
 INTERVAL_HATCHLING = 900
 INTERVAL_RUNNER = 1800
+INTERVAL_SMART_MONEY = 1800   # 30min — same as runner
 INTERVAL_ESTABLISHED = 14400
 INTERVAL_HUOYAN = 14400
 INTERVAL_REGIME = 14400
@@ -35,6 +36,7 @@ _last_run = {
     'tier2_kol': 0,
     'hatchling': 0,
     'runner': 0,
+    'smart_money': 0,
     'established': 0,
     'huoyan': 0,
     'regime': 0,
@@ -147,6 +149,18 @@ def run_moonbag_reaper():
         log.error("Moonbag reaper failed: %s", e)
 
 
+def run_smart_money_poll():
+    """Poll smart money X accounts via Grok API."""
+    try:
+        from social.grok_poller import run_smart_money_poll
+        result = run_smart_money_poll()
+        total = result.get("total_signals", 0)
+        if total > 0:
+            log.info("Smart money poll: %d new signals", total)
+    except Exception as e:
+        log.error("Smart money poll failed: %s", e)
+
+
 def run_shadow_update():
     """Update open shadow trades."""
     try:
@@ -207,6 +221,11 @@ def main_loop():
                 # Also update shadow trades
                 threading.Thread(target=run_shadow_update, daemon=True).start()
                 _mark_run('runner')
+
+            # Smart money X poll — every 30min
+            if _should_run('smart_money', INTERVAL_SMART_MONEY):
+                threading.Thread(target=run_smart_money_poll, daemon=True).start()
+                _mark_run('smart_money')
 
             # Established scoring + Huoyan + Regime — every 4h
             if _should_run('established', INTERVAL_ESTABLISHED):
