@@ -25,7 +25,8 @@ INTERVAL_TIER1_KOL = 180
 INTERVAL_TIER2_KOL = 600
 INTERVAL_HATCHLING = 900
 INTERVAL_RUNNER = 1800
-INTERVAL_SMART_MONEY = 1800   # 30min — same as runner
+INTERVAL_SMART_MONEY_HIGH = 1800    # 30min — specialized + HIGH generic
+INTERVAL_SMART_MONEY_MEDIUM = 7200  # 2hr — MEDIUM generic
 INTERVAL_ESTABLISHED = 14400
 INTERVAL_HUOYAN = 14400
 INTERVAL_REGIME = 14400
@@ -38,7 +39,8 @@ _last_run = {
     'tier2_kol': _now,            # first fire at +600s
     'hatchling': _now - 840,      # first fire at +60s
     'runner': _now - 1680,        # first fire at +120s
-    'smart_money': _now,          # first fire at +1800s (no Helius)
+    'smart_money_high': _now,     # first fire at +1800s (no Helius)
+    'smart_money_medium': _now,   # first fire at +7200s (no Helius)
     'established': _now,          # first fire at +14400s
     'huoyan': _now,
     'regime': _now,
@@ -163,16 +165,28 @@ def run_moonbag_reaper():
         log.error("Moonbag reaper failed: %s", e)
 
 
-def run_smart_money_poll():
-    """Poll smart money X accounts via Grok API."""
+def run_smart_money_poll_high():
+    """Poll smart money HIGH tier X accounts via Grok API."""
     try:
-        from social.grok_poller import run_smart_money_poll
-        result = run_smart_money_poll()
+        from social.grok_poller import run_smart_money_poll_high
+        result = run_smart_money_poll_high()
         total = result.get("total_signals", 0)
         if total > 0:
-            log.info("Smart money poll: %d new signals", total)
+            log.info("Smart money HIGH tier poll: %d new signals", total)
     except Exception as e:
-        log.error("Smart money poll failed: %s", e)
+        log.error("Smart money HIGH tier poll failed: %s", e)
+
+
+def run_smart_money_poll_medium():
+    """Poll smart money MEDIUM tier X accounts via Grok API."""
+    try:
+        from social.grok_poller import run_smart_money_poll_medium
+        result = run_smart_money_poll_medium()
+        total = result.get("total_signals", 0)
+        if total > 0:
+            log.info("Smart money MEDIUM tier poll: %d new signals", total)
+    except Exception as e:
+        log.error("Smart money MEDIUM tier poll failed: %s", e)
 
 
 def run_shadow_update():
@@ -236,10 +250,15 @@ def main_loop():
                 threading.Thread(target=run_shadow_update, daemon=True).start()
                 _mark_run('runner')
 
-            # Smart money X poll — every 30min
-            if _should_run('smart_money', INTERVAL_SMART_MONEY):
-                threading.Thread(target=run_smart_money_poll, daemon=True).start()
-                _mark_run('smart_money')
+            # Smart money X poll — HIGH tier every 30min
+            if _should_run('smart_money_high', INTERVAL_SMART_MONEY_HIGH):
+                threading.Thread(target=run_smart_money_poll_high, daemon=True).start()
+                _mark_run('smart_money_high')
+
+            # Smart money X poll — MEDIUM tier every 2hr
+            if _should_run('smart_money_medium', INTERVAL_SMART_MONEY_MEDIUM):
+                threading.Thread(target=run_smart_money_poll_medium, daemon=True).start()
+                _mark_run('smart_money_medium')
 
             # Established scoring + Huoyan + Regime — every 4h
             if _should_run('established', INTERVAL_ESTABLISHED):

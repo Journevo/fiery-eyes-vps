@@ -42,7 +42,8 @@ EXPECTED_TASKS = {
     "infra_discovery": 1440,
     "lifecycle_check": 1440,
     "watch_recheck": SCAN_INTERVAL_MINUTES,
-    "smart_money_poll": 30,     # 30-min poll cycle
+    "smart_money_poll_high": 30,   # 30-min HIGH tier poll
+    "smart_money_poll_medium": 120, # 2-hr MEDIUM tier poll
 }
 
 
@@ -240,20 +241,36 @@ def _lifecycle_check():
     record_run_completion("lifecycle_check")
 
 
-def _smart_money_poll():
-    """Poll smart money X accounts via Grok API."""
-    log.info("=== Smart money X poll ===")
+def _smart_money_poll_high():
+    """Poll smart money HIGH tier X accounts via Grok API."""
+    log.info("=== Smart money HIGH tier X poll ===")
     try:
-        from social.grok_poller import run_smart_money_poll
-        result = run_smart_money_poll()
+        from social.grok_poller import run_smart_money_poll_high
+        result = run_smart_money_poll_high()
         total = result.get("total_signals", 0)
         if total > 0:
-            log.info("Smart money poll: %d new signals", total)
+            log.info("Smart money HIGH tier poll: %d new signals", total)
         else:
-            log.debug("Smart money poll: no new signals")
+            log.debug("Smart money HIGH tier poll: no new signals")
     except Exception as e:
-        log.error("Smart money poll failed: %s", e)
-    record_run_completion("smart_money_poll")
+        log.error("Smart money HIGH tier poll failed: %s", e)
+    record_run_completion("smart_money_poll_high")
+
+
+def _smart_money_poll_medium():
+    """Poll smart money MEDIUM tier X accounts via Grok API."""
+    log.info("=== Smart money MEDIUM tier X poll ===")
+    try:
+        from social.grok_poller import run_smart_money_poll_medium
+        result = run_smart_money_poll_medium()
+        total = result.get("total_signals", 0)
+        if total > 0:
+            log.info("Smart money MEDIUM tier poll: %d new signals", total)
+        else:
+            log.debug("Smart money MEDIUM tier poll: no new signals")
+    except Exception as e:
+        log.error("Smart money MEDIUM tier poll failed: %s", e)
+    record_run_completion("smart_money_poll_medium")
 
 
 def _silence_check():
@@ -278,8 +295,9 @@ def run_scanner():
     except Exception as e:
         log.error("Failed to start bot polling: %s", e)
 
-    # Run first smart money poll immediately
-    _smart_money_poll()
+    # Run first smart money poll immediately (both tiers)
+    _smart_money_poll_high()
+    _smart_money_poll_medium()
 
     # Run first scan cycle immediately
     _scan_cycle()
@@ -296,7 +314,8 @@ def run_scanner():
     schedule.every(4).hours.do(_momentum_snapshot)
     schedule.every().day.at("06:00").do(_nightly_report)
     schedule.every().day.at("06:30").do(_lifecycle_check)
-    schedule.every(SCAN_INTERVAL_MINUTES).minutes.do(_smart_money_poll)
+    schedule.every(SCAN_INTERVAL_MINUTES).minutes.do(_smart_money_poll_high)
+    schedule.every(2).hours.do(_smart_money_poll_medium)
     schedule.every(5).minutes.do(_silence_check)
 
     while True:

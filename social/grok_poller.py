@@ -1,17 +1,19 @@
 """Grok API polling engine — fetches and parses smart money X account tweets.
 
-Polls 4 smart money X accounts via the Grok Responses API (api.x.ai/v1/responses)
+Polls smart money X accounts via the Grok Responses API (api.x.ai/v1/responses)
 with x_search tool and stores parsed signals in the x_intelligence table.
 
-Accounts:
-    @StalkHQ        — KOL accumulation alerts, cabal finder       (every 30min)
-    @kolscan_io     — Real-time KOL transactions, PnL leaderboard (every 30min)
-    @SunFlowSolana  — Whale flow alerts with entry timing         (every 30min)
-    @gmaborabot     — Smart money trending, top traders            (every 60min)
+Tiered polling (181 accounts from grok_monitor_config.csv):
+  - 4 specialized accounts: individual calls, 30min interval (~192 calls/day)
+  - 74 HIGH generic: batches of 10, 30min interval (~384 calls/day)
+  - 97 MEDIUM generic: batches of 15, 2hr interval (~84 calls/day)
+  - Total: ~660 calls/day, ~20K/month, well under $3/month budget
 """
 
+import csv
 import hashlib
 import json
+import os
 import time
 
 import requests
@@ -26,6 +28,7 @@ log = get_logger("social.grok_poller")
 GROK_RESPONSES_URL = "https://api.x.ai/v1/responses"
 GROK_MODEL = "grok-4-1-fast"
 
+# Original 4 specialized accounts (backward compat)
 SMART_MONEY_ACCOUNTS = [
     {"handle": "StalkHQ",       "interval_min": 30, "parser": "stalk"},
     {"handle": "kolscan_io",    "interval_min": 30, "parser": "kolscan"},
@@ -33,8 +36,19 @@ SMART_MONEY_ACCOUNTS = [
     {"handle": "gmaborabot",    "interval_min": 60, "parser": "gmgn"},
 ]
 
-# In-process last-poll timestamps per handle for interval enforcement
+# Specialized handles → their parser keys (all others use "generic")
+_SPECIALIZED_PARSERS = {
+    "StalkHQ": "stalk",
+    "kolscan_io": "kolscan",
+    "SunFlowSolana": "sunflow",
+    "gmaborabot": "gmgn",
+}
+
+# In-process last-poll timestamps per handle/batch for interval enforcement
 _last_poll: dict[str, float] = {}
+
+# CSV config path
+_CSV_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "grok_monitor_config.csv")
 
 
 def _grok_fetch_tweets(handle: str, interval_min: int = 30,
@@ -130,6 +144,153 @@ def _grok_fetch_tweets(handle: str, interval_min: int = 30,
         return []
     except Exception as e:
         log.error("Grok API error for @%s: %s", handle, e)
+        record_api_call("grok", False)
+        return []
+
+
+def _load_monitor_config() -> dict:
+    """Load tiered account config from grok_monitor_config.csv.
+
+    Returns:
+        {"high": [handle, ...], "medium": [handle, ...]}
+    Excludes the 4 specialized accounts (they're polled individually).
+    """
+    high = []
+    medium = []
+
+    try:
+        with open(_CSV_CONFIG_PATH, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                handle_raw = row.get("handle", "").strip()
+                if not handle_raw:
+                    continue
+                # Strip leading @ if present
+                handle = handle_raw.lstrip("@")
+                priority = (row.get("priority") or "").strip().upper()
+
+                # Skip specialized accounts — polled individually
+                if handle in _SPECIALIZED_PARSERS:
+                    continue
+
+                if priority == "HIGH":
+                    high.append(handle)
+                else:
+                    medium.append(handle)
+
+        log.info("Loaded monitor config: %d HIGH + %d MEDIUM generic accounts",
+                 len(high), len(medium))
+    except FileNotFoundError:
+        log.warning("CSV config not found at %s — falling back to specialized only",
+                    _CSV_CONFIG_PATH)
+    except Exception as e:
+        log.error("Failed to load monitor config: %s — falling back", e)
+
+    return {"high": high, "medium": medium}
+
+
+def _grok_fetch_tweets_batch(handles: list[str], interval_min: int = 30,
+                              max_tweets: int = 5) -> list[dict]:
+    """Call Grok Responses API with multiple handles in allowed_x_handles.
+
+    Returns list of {"handle": str, "text": str} dicts, empty on error.
+    Uses a longer timeout (90s) since batch queries take more time.
+    """
+    if not GROK_API_KEY or not handles:
+        return []
+
+    handles_str = ", ".join(f"@{h}" for h in handles)
+    user_prompt = (
+        f"Find the most recent posts from these X accounts: {handles_str}. "
+        f"Return up to {max_tweets} posts per account. "
+        f'Return ONLY a JSON object: {{"tweets": [{{"handle": "account_name", "text": "full post text"}}, ...]}}. '
+        f'If no posts found, return {{"tweets": []}}. '
+        f"Include each post's full text verbatim including dollar signs, "
+        f"contract addresses, and numbers. Do not summarize or paraphrase. "
+        f"The handle field should NOT include the @ symbol."
+    )
+
+    try:
+        resp = requests.post(
+            GROK_RESPONSES_URL,
+            headers={
+                "Authorization": f"Bearer {GROK_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": GROK_MODEL,
+                "instructions": (
+                    "You are a data extraction assistant. "
+                    "Return only valid JSON. No prose, no markdown fences."
+                ),
+                "input": [
+                    {"role": "user", "content": user_prompt},
+                ],
+                "tools": [
+                    {
+                        "type": "x_search",
+                        "allowed_x_handles": handles,
+                    }
+                ],
+                "temperature": 0,
+            },
+            timeout=90,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        record_api_call("grok", True)
+
+        # Extract text content from response
+        output = data.get("output", [])
+        content = ""
+        for item in output:
+            if item.get("type") == "message":
+                for block in item.get("content", []):
+                    if block.get("type") == "output_text":
+                        content += block.get("text", "")
+
+        if not content:
+            log.debug("Grok batch returned no content for %d handles", len(handles))
+            return []
+
+        # Strip markdown fences
+        content = content.strip()
+        if content.startswith("```"):
+            lines = content.split("\n")
+            lines = [l for l in lines if not l.strip().startswith("```")]
+            content = "\n".join(lines)
+
+        parsed = json.loads(content)
+        tweets = parsed.get("tweets", [])
+
+        if not isinstance(tweets, list):
+            log.warning("Grok batch returned non-list tweets: %s", type(tweets).__name__)
+            return []
+
+        # Normalize: ensure each entry has handle + text
+        results = []
+        for t in tweets:
+            if isinstance(t, dict) and t.get("text"):
+                handle = t.get("handle", "").lstrip("@")
+                results.append({"handle": handle, "text": str(t["text"])})
+            elif isinstance(t, str) and t:
+                # Fallback: if Grok returns plain strings, attribute to first handle
+                results.append({"handle": handles[0], "text": t})
+
+        log.info("Grok batch returned %d tweets for %d handles", len(results), len(handles))
+        return results
+
+    except json.JSONDecodeError as e:
+        log.error("Grok batch JSON parse error: %s (content: %.200s)",
+                  e, content if 'content' in dir() else "N/A")
+        record_api_call("grok", False)
+        return []
+    except requests.RequestException as e:
+        log.error("Grok batch API request error: %s", e)
+        record_api_call("grok", False)
+        return []
+    except Exception as e:
+        log.error("Grok batch API error: %s", e)
         record_api_call("grok", False)
         return []
 
@@ -271,18 +432,12 @@ def poll_account(handle_config: dict) -> int:
     return new_count
 
 
-def run_smart_money_poll() -> dict:
-    """Main entry point: poll all 4 smart money accounts.
+def _poll_specialized_accounts() -> dict:
+    """Poll the 4 original specialized accounts individually.
 
     Returns:
-        {"total_signals": int, "per_account": {handle: count},
-         "errors": [handle_that_failed]}
+        {"total_signals": int, "per_account": {handle: count}, "errors": [str]}
     """
-    if not GROK_API_KEY:
-        log.warning("GROK_API_KEY not set — smart money polling disabled")
-        return {"total_signals": 0, "per_account": {}, "errors": []}
-
-    log.info("=== Smart money X poll starting ===")
     total = 0
     per_account = {}
     errors = []
@@ -301,10 +456,138 @@ def run_smart_money_poll() -> dict:
         # 2s sleep between accounts to avoid rate-limiting
         time.sleep(2)
 
-    log.info("Smart money poll complete: %d new signals (%s)",
-             total, ", ".join(f"@{h}={c}" for h, c in per_account.items()))
+    return {"total_signals": total, "per_account": per_account, "errors": errors}
+
+
+def _poll_batch_tier(accounts: list[str], batch_size: int) -> dict:
+    """Poll generic accounts in batches via _grok_fetch_tweets_batch.
+
+    Returns:
+        {"total_signals": int, "per_account": {handle: count}, "errors": [str]}
+    """
+    total = 0
+    per_account = {}
+    errors = []
+
+    # Interval gate for the batch tier (keyed by tier name)
+    batch_key = f"batch_{batch_size}_{len(accounts)}"
+    now = time.time()
+
+    for i in range(0, len(accounts), batch_size):
+        batch = accounts[i:i + batch_size]
+        batch_id = f"batch_{i // batch_size}"
+
+        try:
+            tweet_items = _grok_fetch_tweets_batch(batch, max_tweets=5)
+
+            for item in tweet_items:
+                handle = item["handle"]
+                tweet_text = item["text"]
+                tweet_id = _compute_tweet_id(handle, tweet_text)
+
+                if _is_already_processed(tweet_id):
+                    continue
+
+                # Use specialized parser if available, else generic
+                parser_key = _SPECIALIZED_PARSERS.get(handle, "generic")
+                parser_fn = PARSER_MAP.get(parser_key)
+                if not parser_fn:
+                    parser_fn = PARSER_MAP.get("generic")
+
+                try:
+                    parsed = parser_fn(tweet_text)
+                except Exception as e:
+                    log.error("Parser error for @%s tweet: %s", handle, e)
+                    continue
+
+                if _store_signal(handle, tweet_id, tweet_text, parsed):
+                    _route_signal_alert(handle, parsed, tweet_text)
+                    per_account[handle] = per_account.get(handle, 0) + 1
+                    total += 1
+                    log.info("New signal: @%s %s $%s [%s]",
+                             handle, parsed.get("parsed_type"),
+                             parsed.get("token_symbol") or "?",
+                             parsed.get("signal_strength"))
+
+        except Exception as e:
+            log.error("Batch poll failed (%s): %s", batch_id, e)
+            errors.extend(batch)
+
+        # 3s sleep between batches to avoid rate-limiting
+        time.sleep(3)
 
     return {"total_signals": total, "per_account": per_account, "errors": errors}
+
+
+def run_smart_money_poll_high() -> dict:
+    """Poll HIGH tier: 4 specialized accounts + HIGH generic (batches of 10).
+
+    Called every 30 minutes.
+
+    Returns:
+        {"total_signals": int, "per_account": {handle: count}, "errors": [str]}
+    """
+    if not GROK_API_KEY:
+        log.warning("GROK_API_KEY not set — smart money polling disabled")
+        return {"total_signals": 0, "per_account": {}, "errors": []}
+
+    log.info("=== Smart money HIGH tier poll starting ===")
+
+    # 1. Poll specialized accounts individually
+    result = _poll_specialized_accounts()
+
+    # 2. Poll HIGH generic accounts in batches
+    config = _load_monitor_config()
+    high_accounts = config.get("high", [])
+
+    if high_accounts:
+        batch_result = _poll_batch_tier(high_accounts, batch_size=10)
+        result["total_signals"] += batch_result["total_signals"]
+        result["per_account"].update(batch_result["per_account"])
+        result["errors"].extend(batch_result["errors"])
+
+    log.info("Smart money HIGH tier poll complete: %d new signals (specialized + %d HIGH generic)",
+             result["total_signals"], len(high_accounts))
+
+    return result
+
+
+def run_smart_money_poll_medium() -> dict:
+    """Poll MEDIUM tier: MEDIUM generic accounts only (batches of 15).
+
+    Called every 2 hours.
+
+    Returns:
+        {"total_signals": int, "per_account": {handle: count}, "errors": [str]}
+    """
+    if not GROK_API_KEY:
+        log.warning("GROK_API_KEY not set — smart money polling disabled")
+        return {"total_signals": 0, "per_account": {}, "errors": []}
+
+    log.info("=== Smart money MEDIUM tier poll starting ===")
+
+    config = _load_monitor_config()
+    medium_accounts = config.get("medium", [])
+
+    if not medium_accounts:
+        log.info("No MEDIUM tier accounts to poll")
+        return {"total_signals": 0, "per_account": {}, "errors": []}
+
+    result = _poll_batch_tier(medium_accounts, batch_size=15)
+
+    log.info("Smart money MEDIUM tier poll complete: %d new signals (%d accounts)",
+             result["total_signals"], len(medium_accounts))
+
+    return result
+
+
+def run_smart_money_poll() -> dict:
+    """Backward-compatible entry point: calls run_smart_money_poll_high().
+
+    Returns:
+        {"total_signals": int, "per_account": {handle: count}, "errors": [str]}
+    """
+    return run_smart_money_poll_high()
 
 
 def get_recent_x_signals(hours: int = 4,

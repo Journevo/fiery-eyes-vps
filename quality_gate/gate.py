@@ -1,9 +1,11 @@
 """Quality Gate Orchestrator — three-tier gate: FULL PASS / WATCH / REJECT.
 
-Runs all 7 checks, evaluates velocity signals, and classifies tokens into:
-  - PASSED:   all 7 checks pass -> enters scoring pipeline
+Runs all 8 checks, evaluates velocity signals, and classifies tokens into:
+  - PASSED:   all 8 checks pass -> enters scoring pipeline
   - WATCHING: contract safety OK + age >2h + volume >$25K + at least 1 velocity signal
-  - REJECTED: fails contract safety OR age OR zero velocity signals
+  - REJECTED: fails social verification OR contract safety OR age OR zero velocity signals
+
+Check 0 (social verification) triggers early exit on failure — skips remaining 7 checks.
 """
 
 import json
@@ -11,7 +13,7 @@ from datetime import datetime, timezone, timedelta
 
 from config import HELIUS_RPC_URL, get_logger
 from db.connection import execute, execute_one
-from quality_gate import contract_safety, liquidity, holders, sybil, unlocks, wash_trading, age_volume
+from quality_gate import contract_safety, liquidity, holders, sybil, unlocks, wash_trading, age_volume, social_verification
 from quality_gate.helpers import get_json, post_json
 
 log = get_logger("gate")
@@ -191,12 +193,12 @@ def _check_dexscreener_trending(mint: str) -> bool:
 
 def run_gate(mint: str, category: str = "meme") -> dict:
     """
-    Run all 7 quality gate checks on a Solana token with three-tier outcome.
+    Run all 8 quality gate checks on a Solana token with three-tier outcome.
 
     Outcomes:
-      PASSED   — all 7 checks pass. Enters scoring pipeline.
-      WATCHING — contract safety passes + age >2h + volume >$25K + velocity signal.
-      REJECTED — fails contract safety OR age OR zero velocity.
+      PASSED   — all 8 checks pass. Enters scoring pipeline.
+      WATCHING — social + contract safety pass + age >2h + volume >$25K + velocity signal.
+      REJECTED — fails social verification OR contract safety OR age OR zero velocity.
 
     Args:
         mint: Solana token contract address
@@ -209,6 +211,7 @@ def run_gate(mint: str, category: str = "meme") -> dict:
             "overall_pass": bool,         # True for FULL PASS only (backward compat)
             "gate_status": str,           # "passed", "watching", "rejected"
             "checks": {
+                "social_verification": {...},
                 "contract_safety": {...},
                 "liquidity": {...},
                 "holders": {...},
@@ -226,32 +229,53 @@ def run_gate(mint: str, category: str = "meme") -> dict:
 
     checks = {}
 
+    # 0. Social Verification — cheapest check, fail fast
+    log.info("[1/8] Social Verification...")
+    checks["social_verification"] = social_verification.check(mint)
+    if not checks["social_verification"]["pass"]:
+        log.info("=== REJECTED %s — social verification failed: %s ===",
+                 mint, checks["social_verification"].get("reason"))
+        dex_data = _fetch_dexscreener_data(mint)
+        result = {
+            "mint": mint,
+            "category": category,
+            "overall_pass": False,
+            "gate_status": "rejected",
+            "checks": checks,
+            "failures": ["social_verification"],
+            "velocity_signals": [],
+            "dex_data": dex_data or {},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        _save_gate_result(mint, category, result)
+        return result
+
     # 1. Contract Safety
-    log.info("[1/7] Contract Safety...")
+    log.info("[2/8] Contract Safety...")
     checks["contract_safety"] = contract_safety.check(mint)
 
     # 2. Liquidity Depth
-    log.info("[2/7] Liquidity Depth...")
+    log.info("[3/8] Liquidity Depth...")
     checks["liquidity"] = liquidity.check(mint)
 
     # 3. Holder Distribution
-    log.info("[3/7] Holder Distribution...")
+    log.info("[4/8] Holder Distribution...")
     checks["holders"] = holders.check(mint)
 
     # 4. Sybil Risk
-    log.info("[4/7] Sybil Risk...")
+    log.info("[5/8] Sybil Risk...")
     checks["sybil"] = sybil.check(mint)
 
     # 5. Unlock Overhang
-    log.info("[5/7] Unlock Overhang...")
+    log.info("[6/8] Unlock Overhang...")
     checks["unlocks"] = unlocks.check(mint, category=category)
 
     # 6. Wash Trading
-    log.info("[6/7] Wash Trading...")
+    log.info("[7/8] Wash Trading...")
     checks["wash_trading"] = wash_trading.check(mint)
 
     # 7. Age / Volume
-    log.info("[7/7] Age / Volume...")
+    log.info("[8/8] Age / Volume...")
     checks["age_volume"] = age_volume.check(mint)
 
     # Determine failures
@@ -268,7 +292,7 @@ def run_gate(mint: str, category: str = "meme") -> dict:
         # FULL PASS: all 7 checks passed
         gate_status = "passed"
         overall_pass = True
-        log.info("=== FULL PASS for %s — all 7/7 checks passed ===", mint)
+        log.info("=== FULL PASS for %s — all 8/8 checks passed ===", mint)
 
     elif _qualifies_for_watch(checks, failures):
         # Candidate for WATCH — check velocity signals
@@ -310,11 +334,16 @@ def _qualifies_for_watch(checks: dict, failures: list[str]) -> bool:
     """Check if a token meets minimum WATCH tier requirements.
 
     Requirements:
+      - Social verification MUST pass (hard requirement — enforced via early exit)
       - Contract safety MUST pass (hard requirement)
       - Age must be >2 hours
       - Volume must be >$25K
     Other checks (liquidity, holders, sybil, unlocks, wash_trading) can fail.
     """
+    # Social verification must pass (normally caught by early exit, but defensive)
+    if not checks.get("social_verification", {}).get("pass", False):
+        return False
+
     # Contract safety must pass
     if not checks.get("contract_safety", {}).get("pass", False):
         return False
@@ -536,7 +565,7 @@ def _promote_to_passed(mint: str, token_id: int):
             send_message(
                 f"✅ <b>PROMOTED: WATCHING -> FULL PASS</b>\n"
                 f"Token: <code>{mint}</code>\n"
-                f"All 7 quality checks now passing."
+                f"All 8 quality checks now passing."
             )
         except Exception as e:
             log.warning("Failed to send promotion Telegram alert: %s", e)

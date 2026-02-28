@@ -37,23 +37,9 @@ SEED_WALLETS = [
     },
 
     # Tier 2 — Monitor only (confirmation signal)
-    {
-        "name": "Cupsey",
-        "wallet_address": "2fg5QD1eD7rzNNCsvnhmXFm5hqNgwTTG8p7kQ6f3rx6f",
-        "tier": 2,
-        "style": "high_frequency",
-        "conviction_filter_min_usd": 500,
-        "trades_per_day": 910,
-        "notes": "FARMS copy-traders. Only flag conviction buys >$500 held >10min",
-    },
-    {
-        "name": "Orangie",
-        "wallet_address": "96sErVjEN7LNJ6Uvj63bdRWZxNuBngj56fnT9biHLKBf",
-        "tier": 2,
-        "style": "high_frequency",
-        "conviction_filter_min_usd": 500,
-        "notes": "Similar to Cupsey, recently changed wallets",
-    },
+    # NOTE: Cupsey & Orangie REMOVED from wallet tracking (900+ trades/day
+    # burns too many Helius credits). They remain in grok_monitor_config.csv
+    # as X-only confirmation signals.
     {
         "name": "Nach",
         "wallet_address": "9jyqFiLnruggwNn4EQwBNFXwpbLM9hrA4hV59ytyAVVz",

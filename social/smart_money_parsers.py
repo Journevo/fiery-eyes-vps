@@ -262,6 +262,75 @@ def parse_gmgn_tweet(tweet_text: str) -> dict:
     return sig
 
 
+def parse_generic_tweet(tweet_text: str) -> dict:
+    """Parse a generic smart money account tweet into a structured signal.
+
+    Uses keyword classification to determine parsed_type and signal_strength.
+    Works for any account not handled by a specialized parser.
+    """
+    sig = _base_signal()
+    text_lower = tweet_text.lower()
+
+    symbols = _extract_symbols(tweet_text)
+    sig["token_symbol"] = symbols[0] if symbols else None
+    sig["token_address"] = _extract_solana_address(tweet_text)
+    sig["amount_usd"] = _extract_usd_amount(tweet_text)
+    sig["wallet_address"] = _extract_solana_address(tweet_text)
+
+    wallet_count = _extract_wallet_count(tweet_text)
+
+    # Keyword classification (priority order)
+    if any(kw in text_lower for kw in ("cabal", "insider", "coordinated")):
+        sig["parsed_type"] = "cabal_alert"
+        sig["extra"] = {"wallet_count": wallet_count, "symbols": symbols}
+        sig["signal_strength"] = "strong"
+
+    elif wallet_count >= 3 or "kols bought" in text_lower or "multi" in text_lower:
+        sig["parsed_type"] = "multi_kol"
+        sig["extra"] = {"wallet_count": wallet_count, "symbols": symbols}
+        sig["signal_strength"] = _compute_signal_strength(wallet_count, sig["amount_usd"])
+
+    elif any(kw in text_lower for kw in ("whale", "massive flow", "big buy")):
+        sig["parsed_type"] = "whale_flow"
+        sig["extra"] = {"wallet_count": wallet_count}
+        sig["signal_strength"] = _compute_signal_strength(
+            wallet_count, sig["amount_usd"], True)
+
+    elif any(kw in text_lower for kw in ("accumulat", "loading", "stacking")):
+        sig["parsed_type"] = "accumulation"
+        sig["extra"] = {"wallet_count": wallet_count}
+        sig["signal_strength"] = _compute_signal_strength(
+            wallet_count, sig["amount_usd"])
+
+    elif any(kw in text_lower for kw in ("trending", "hot", "top ")):
+        sig["parsed_type"] = "trending"
+        sig["extra"] = {"symbols": symbols}
+        sig["signal_strength"] = "medium"
+
+    elif "bought" in text_lower or "buy" in text_lower:
+        sig["parsed_type"] = "transaction"
+        sig["extra"] = {"action": "buy"}
+        sig["signal_strength"] = _compute_signal_strength(
+            wallet_count, sig["amount_usd"])
+
+    elif "sold" in text_lower or "sell" in text_lower:
+        sig["parsed_type"] = "transaction"
+        sig["extra"] = {"action": "sell"}
+        sig["signal_strength"] = _compute_signal_strength(0, sig["amount_usd"])
+
+    elif any(kw in text_lower for kw in ("launch", "listed", "live on")):
+        sig["parsed_type"] = "launch"
+        sig["extra"] = {"symbols": symbols}
+        sig["signal_strength"] = "medium"
+
+    else:
+        sig["parsed_type"] = "info"
+        sig["extra"] = {"symbols": symbols}
+        sig["signal_strength"] = "weak"
+
+    return sig
+
+
 # --- Parser dispatch ---
 
 PARSER_MAP = {
@@ -269,6 +338,7 @@ PARSER_MAP = {
     "kolscan": parse_kolscan_tweet,
     "sunflow": parse_sunflow_tweet,
     "gmgn": parse_gmgn_tweet,
+    "generic": parse_generic_tweet,
 }
 
 
@@ -349,5 +419,26 @@ if __name__ == "__main__":
     syms = _extract_symbols("$BONK and $WIF are hot, also $USDT")
     assert syms == ["BONK", "WIF"], f"Expected ['BONK', 'WIF'], got {syms}"
     print("  Symbol extraction: OK")
+
+    # Test generic parser — cabal
+    sample_g1 = "ALERT: Insider cabal detected on $DOGE — 15 wallets coordinated"
+    result_g1 = parse_generic_tweet(sample_g1)
+    assert result_g1["parsed_type"] == "cabal_alert"
+    assert result_g1["signal_strength"] == "strong"
+    print("  Generic cabal parser: OK")
+
+    # Test generic parser — accumulation
+    sample_g2 = "Smart wallets accumulating $POPCAT — $25K total bought"
+    result_g2 = parse_generic_tweet(sample_g2)
+    assert result_g2["parsed_type"] == "accumulation"
+    assert result_g2["token_symbol"] == "POPCAT"
+    print("  Generic accumulation parser: OK")
+
+    # Test generic parser — trending
+    sample_g3 = "Trending: $BONK, $WIF are hot right now"
+    result_g3 = parse_generic_tweet(sample_g3)
+    assert result_g3["parsed_type"] == "trending"
+    assert result_g3["signal_strength"] == "medium"
+    print("  Generic trending parser: OK")
 
     print("\nAll parser tests passed!")
