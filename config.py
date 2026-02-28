@@ -49,6 +49,7 @@ HELIUS_API_URL = f"https://api.helius.xyz/v1"
 GATE_MAX_SLIPPAGE_PCT = 5.0          # reject if >5% slippage on $10K swap
 GATE_MAX_TOP10_PCT = 50.0            # reject if top10 holders >50% supply
 GATE_MAX_SYBIL_SCORE = 70            # reject if sybil score >70
+GATE_MIN_WALLET_QUALITY = 25         # warn if avg wallet quality <25
 GATE_MAX_UNLOCK_VOLUME_RATIO = 3.0   # reject if unlock/volume >3x
 GATE_MAX_WASH_SCORE = 70             # reject if wash trading score >70
 GATE_MIN_AGE_HOURS = 2               # reject if token <2h old

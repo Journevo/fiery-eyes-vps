@@ -26,16 +26,37 @@ WEIGHTS = {
 
 
 def _score_x(keyword: str, mint: str | None) -> float:
-    """Get X/Twitter score (0-100)."""
+    """Get X/Twitter score (0-100).
+
+    Blends DexScreener presence (0-40 range) with x_intelligence
+    smart money signals (0-60 range) for a more complete picture.
+    """
+    # DexScreener proxy score (0-40 range)
+    dex_score = 0.0
     try:
         from social.x_monitor import get_dexscreener_social_proxy, get_mention_count
         if mint:
             proxy = get_dexscreener_social_proxy(mint)
-            return proxy.get("score", 0)
-        mentions = get_mention_count(keyword)
-        return min(100, mentions.get("mentions", 0))
+            dex_score = proxy.get("score", 0) * 0.4
+        else:
+            mentions = get_mention_count(keyword)
+            dex_score = min(40, mentions.get("mentions", 0) * 0.4)
     except Exception:
-        return 0
+        pass
+
+    # X intelligence signals (0-60 range)
+    x_intel_score = 0.0
+    try:
+        from social.grok_poller import get_x_intelligence_summary
+        summary = get_x_intelligence_summary(mint)
+        signal_count = summary.get("signal_count", 0)
+        strong_signals = summary.get("strong_signals", 0)
+        if signal_count > 0:
+            x_intel_score = min(45, signal_count * 15) + min(15, strong_signals * 5)
+    except Exception:
+        pass
+
+    return min(100, dex_score + x_intel_score)
 
 
 def _score_trends(keyword: str) -> float:

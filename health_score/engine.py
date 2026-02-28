@@ -1,9 +1,8 @@
 """Health Score v2 Engine — Core scoring for Fiery Golden Eyes.
 
-Scores tokens /100 based on 3 core signals (phase 1) or 5 (phase 2+).
+Scores tokens /100 based on 5 signals (phase 2).
 
-PHASE 1 (launch): Volume(30) + Price(20) + KOL(20) = /70, scaled to /100
-PHASE 2 (earned): + Social(20) + Holders(10) = /100
+Volume(30) + Price(20) + KOL(20) + Social(20) + Holders(10) = /100
 
 Every score includes a Data Confidence percentage.
 Low confidence = auto-actions disabled.
@@ -15,8 +14,7 @@ from db.connection import execute
 
 log = get_logger("health_score.engine")
 
-# Phase 1 active signals (phase 2 adds 'social' and 'holders')
-ACTIVE_SIGNALS = ['volume', 'price', 'kol']
+ACTIVE_SIGNALS = ['volume', 'price', 'kol', 'social', 'holders']
 
 SIGNAL_WEIGHTS = {
     'volume': 30,
@@ -56,8 +54,8 @@ def score_token(token_address: str, token_symbol: str | None = None) -> dict:
         'holders': holder_state,
     }
 
-    # Calculate raw score (only active signals)
-    raw_score = vol_score + price_score + kol_score
+    # Calculate raw score (all 5 signals)
+    raw_score = vol_score + price_score + kol_score + social_score + holder_score
     max_possible = sum(SIGNAL_WEIGHTS[s] for s in ACTIVE_SIGNALS)  # 70 in phase 1
 
     # Scaled score: (raw/max)*100

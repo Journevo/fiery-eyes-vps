@@ -40,12 +40,39 @@ def _get_top_holders(mint: str, limit: int = 20) -> list[dict]:
     return holders
 
 
-def _detect_clusters(holders: list[dict]) -> list[list[str]]:
+def _detect_clusters_for_mint(mint: str) -> list[list[str]]:
+    """Detect wallet clusters using cached snapshot or live cluster detection.
+
+    1. Check snapshot: if holders_raw > holders_quality_adjusted, clusters exist
+    2. Fall back to collectors.cluster.detect_clusters() for full analysis
     """
-    Basic cluster detection stub.
-    Phase 2: check if wallets were funded from the same source within 24h.
-    """
-    return []
+    # Check cached snapshot first
+    try:
+        from db.connection import execute_one
+        row = execute_one(
+            """SELECT s.holders_raw, s.holders_quality_adjusted
+               FROM snapshots_daily s
+               JOIN tokens t ON t.id = s.token_id
+               WHERE t.contract_address = %s
+               ORDER BY s.date DESC LIMIT 1""",
+            (mint,),
+        )
+        if row and row[0] and row[1] and row[0] > row[1]:
+            gap = row[0] - row[1]
+            log.info("Snapshot shows %d clustered wallets for %s", gap, mint[:16])
+            # Return a synthetic cluster to indicate clusters were detected
+            return [["snapshot_inferred"]] * min(gap, 5)
+    except Exception as e:
+        log.debug("Snapshot cluster check failed: %s", e)
+
+    # Fall back to live cluster detection
+    try:
+        from collectors.cluster import detect_clusters
+        result = detect_clusters(mint)
+        return result.get("clusters", [])
+    except Exception as e:
+        log.debug("Live cluster detection failed: %s", e)
+        return []
 
 
 def check(mint: str) -> dict:
@@ -90,7 +117,7 @@ def check(mint: str) -> dict:
         top10_pct = (top10_amount / total_supply) * 100
         result["top10_pct"] = round(top10_pct, 2)
 
-        clusters = _detect_clusters(holders)
+        clusters = _detect_clusters_for_mint(mint)
         result["clusters_found"] = len(clusters)
 
         if top10_pct > GATE_MAX_TOP10_PCT:

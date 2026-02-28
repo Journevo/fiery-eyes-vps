@@ -1,7 +1,7 @@
 """Check 4: Sybil Risk Score — fresh wallet % + sybil scoring.
    Also provides wallet quality scoring for downstream engines."""
 
-from config import HELIUS_RPC_URL, HELIUS_API_KEY, GATE_MAX_SYBIL_SCORE, get_logger
+from config import HELIUS_RPC_URL, HELIUS_API_KEY, GATE_MAX_SYBIL_SCORE, GATE_MIN_WALLET_QUALITY, get_logger
 from quality_gate.helpers import get_json, post_json
 import time
 
@@ -271,6 +271,13 @@ def check(mint: str) -> dict:
             result["pass"] = True
             log.info("Sybil PASS for %s (score %d, quality %.0f)",
                      mint, result["sybil_score"], result["avg_quality"])
+
+        # Quality warning (does NOT affect pass/fail — informational for downstream)
+        if result["avg_quality"] < GATE_MIN_WALLET_QUALITY:
+            result["quality_warning"] = (
+                f"Low wallet quality ({result['avg_quality']:.0f} < {GATE_MIN_WALLET_QUALITY})"
+            )
+            log.info("Quality warning for %s: %s", mint, result["quality_warning"])
 
     except Exception as e:
         log.error("Sybil check failed for %s: %s", mint, e)
