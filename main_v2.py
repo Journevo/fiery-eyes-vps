@@ -2,8 +2,8 @@
 """Fiery Eyes v2 Main Loop — persistent daemon.
 
 Runs continuously:
-- Every 60s:  Check Tier 1 KOL wallets
-- Every 5min: Check Tier 2 KOL wallets, detect convergence
+- Every 3min: Check Tier 1 KOL wallets
+- Every 10min: Check Tier 2 KOL wallets, detect convergence
 - Every 15min: Score Hatchling tokens
 - Every 30min: Score Runner tokens, check DexScreener trending
 - Every 4h:  Score Established tokens, generate Huoyan pulse, update regime
@@ -21,8 +21,8 @@ from config import get_logger
 log = get_logger("main_v2")
 
 # Schedule intervals in seconds
-INTERVAL_TIER1_KOL = 60
-INTERVAL_TIER2_KOL = 300
+INTERVAL_TIER1_KOL = 180
+INTERVAL_TIER2_KOL = 600
 INTERVAL_HATCHLING = 900
 INTERVAL_RUNNER = 1800
 INTERVAL_SMART_MONEY = 1800   # 30min — same as runner
@@ -55,16 +55,10 @@ def _mark_run(task: str):
 
 
 def run_tier1_kol():
-    """Check Tier 1 KOL wallets."""
+    """Check Tier 1 KOL wallets only."""
     try:
         from kol_tracking.monitor import check_kol_wallets
-        from db.connection import execute
-        wallets = execute(
-            "SELECT id, name, wallet_address FROM kol_wallets WHERE tier = 1 AND is_active = TRUE",
-            fetch=True,
-        )
-        if wallets:
-            check_kol_wallets()
+        check_kol_wallets(tier_filter=1)
     except Exception as e:
         log.error("Tier 1 KOL check failed: %s", e)
 
@@ -73,7 +67,7 @@ def run_tier2_kol():
     """Check Tier 2 KOL wallets + convergence detection."""
     try:
         from kol_tracking.monitor import check_kol_wallets, detect_convergence
-        check_kol_wallets()
+        check_kol_wallets(tier_filter=2)
         convergences = detect_convergence()
         if convergences:
             from telegram_bot.severity import route_alert

@@ -44,27 +44,43 @@ def _get_sol_price() -> float:
     return _sol_price_cache['price'] or 150  # fallback
 
 
-def check_kol_wallets():
-    """Main function: check all active KOL wallets for new transactions."""
+def check_kol_wallets(tier_filter: int | None = None):
+    """Main function: check active KOL wallets for new transactions.
+
+    Args:
+        tier_filter: If set, only check wallets of this tier (1 or 2).
+                     If None, check all active wallets.
+    """
     if not HELIUS_API_KEY:
         log.warning("HELIUS_API_KEY not set — KOL monitoring disabled")
         return
 
     try:
-        wallets = execute(
-            """SELECT id, name, wallet_address, tier, style,
-                      conviction_filter_min_usd, conviction_filter_min_hold_sec
-               FROM kol_wallets
-               WHERE is_active = TRUE
-               ORDER BY tier ASC""",
-            fetch=True,
-        )
+        if tier_filter is not None:
+            wallets = execute(
+                """SELECT id, name, wallet_address, tier, style,
+                          conviction_filter_min_usd, conviction_filter_min_hold_sec
+                   FROM kol_wallets
+                   WHERE is_active = TRUE AND tier = %s
+                   ORDER BY tier ASC""",
+                (tier_filter,),
+                fetch=True,
+            )
+        else:
+            wallets = execute(
+                """SELECT id, name, wallet_address, tier, style,
+                          conviction_filter_min_usd, conviction_filter_min_hold_sec
+                   FROM kol_wallets
+                   WHERE is_active = TRUE
+                   ORDER BY tier ASC""",
+                fetch=True,
+            )
     except Exception as e:
         log.error("Failed to fetch KOL wallets: %s", e)
         return
 
     if not wallets:
-        log.info("No active KOL wallets to monitor")
+        log.info("No active KOL wallets to monitor (tier_filter=%s)", tier_filter)
         return
 
     sol_price = _get_sol_price()
