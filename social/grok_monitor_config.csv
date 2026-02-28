@@ -1,0 +1,175 @@
+handle,display_name,priority,frequency,category
+@0xFarmi,Farmi,MEDIUM,Every 2hr,Airdrops/Alpha
+@0xUnihax0r,Unihax0r 信心,MEDIUM,Every 2hr,Crypto/Dev
+@100trillionUSD,PlanB,HIGH,Every 30min,Bitcoin/Models
+@9yointern,mei,HIGH,Every 30min,Solana Ecosystem
+@a1lon9,alon,HIGH,Every 30min,Solana Ecosystem
+@abechung,Claynosaurz,MEDIUM,Every 2hr,Solana/NFT
+@aixbt_agent,aixbt,HIGH,Every 30min,AI/Alpha
+@alessandrod,Alessandro Decina,MEDIUM,Every 2hr,Solana/Dev
+@alpha_gardeners,Alpha Gardeners,MEDIUM,Every 2hr,Alpha/Community
+@AltcoinDaily,Daily crypto news,HIGH,Every 30min,News/Analysis
+@amirhaleem,CEO Helium,MEDIUM,Every 2hr,Infrastructure/IoT
+@anglio,Trader/Degen,MEDIUM,Every 2hr,Trading
+@arcdotfun,arc,MEDIUM,Every 2hr,AI/Crypto
+@arthur0x,Arthur,HIGH,Every 30min,VC/DeFi
+@ashen_one,ashen,MEDIUM,Every 2hr,AI/Crypto
+@assetdash,Smart money tracking,MEDIUM,Every 2hr,Data/Analytics
+@assisterr,assisterr,MEDIUM,Every 2hr,AI/Infrastructure
+@AVA_holo,AVA,MEDIUM,Every 2hr,AI/Crypto
+@Baerevo,Analysis,MEDIUM,Every 2hr,Analysis
+@Basem_IO,io.net,MEDIUM,Every 2hr,AI/Infrastructure
+@bcs_bbt,bettercallSOL,MEDIUM,Every 2hr,Marketing/Solana
+@believeapp,Believe,MEDIUM,Every 2hr,Solana/Platform
+@bellaTLopez,Bellalpz,MEDIUM,Every 2hr,Crypto/Content
+@BitcoinMagazine,Bitcoin Magazine,MEDIUM,Every 2hr,Bitcoin/Media
+@blknoiz06,Ansem,HIGH,Every 30min,Solana/Trading
+@bonk_inu,BONK official,MEDIUM,Every 2hr,Solana/Meme
+@brian_armstrong,Coinbase CEO,HIGH,Every 30min,Institutional/Exchange
+@BTCsessions,BTC Sessions,MEDIUM,Every 2hr,Bitcoin/Education
+@btcsol_co,btcSOL (Moved to Zeus App),MEDIUM,Every 2hr,DeFi/Solana
+@calilyliu,Lily Liu,HIGH,Every 30min,Solana Ecosystem
+@candledottv,candle,MEDIUM,Every 2hr,Trading/Tools
+@CathieDWood,Cathie Wood ARK,HIGH,Every 30min,Institutional/Macro
+@CBBI_daily,BTC Index,HIGH,Every 30min,Analysis/Indicators
+@chamath,Chamath Palihapitiya,MEDIUM,Every 2hr,VC/Macro
+@coinbureau,Coin Bureau,HIGH,Every 30min,Analysis/Education
+@Coins_Kid,CoinsKid,MEDIUM,Every 2hr,Trading
+@ColdBloodShill,Cold Blooded Shiller,HIGH,Every 30min,Trading/Alpha
+@ColinTCrypto,Colin Talks Crypto,HIGH,Every 30min,Analysis/Bitcoin
+@cozypront,Cozy The Caller,HIGH,Every 30min,Trading/Calls
+@cryptoape,MultiChain,MEDIUM,Every 2hr,DeFi/Infrastructure
+@Cryptocito,Cryptocito,MEDIUM,Every 2hr,Analysis
+@CryptoCon_,CryptoCon,HIGH,Every 30min,Analysis/Bitcoin
+@CryptoCrewU,Bitcoin TA,HIGH,Every 30min,Analysis/TA
+@CryptoCurb,curb.sol,MEDIUM,Every 2hr,Solana/Marketing
+@CryptoEdgar_,Web3 data,MEDIUM,Every 2hr,Data/Analysis
+@CryptoHornHairs,HornHairs,HIGH,Every 30min,Analysis/Charts
+@cryptomanran,Ran Neuner,HIGH,Every 30min,Analysis/Media
+@CryptoUB,UB,MEDIUM,Every 2hr,Trading/Analysis
+@CryptoWendyO,Wendy O,MEDIUM,Every 2hr,News/Analysis
+@Crypto_Ciara,CsquaredVC,MEDIUM,Every 2hr,VC/Investment
+@ctoLarsson,CTO Larsson — Bitcoin/crypto analyst,HIGH,Every 30min,Analysis/Bitcoin
+@cz_binance,CZ Binance,HIGH,Every 30min,Exchange/Institutional
+@DavidSacks,David Sacks,MEDIUM,Every 2hr,VC/Politics
+@DeFiTracer,TRACER,MEDIUM,Every 2hr,Alpha/Trading
+@DegenerateNews,DEGEN NEWS,MEDIUM,Every 2hr,News/Sentiment
+@Dither_Solana,Dither AI,MEDIUM,Every 2hr,AI/Solana
+@DocumentingBTC,Documenting Bitcoin,MEDIUM,Every 2hr,Bitcoin/Media
+@EleanorTerrett,Eleanor Terrett,HIGH,Every 30min,Journalism/Crypto
+@elonmusk,Elon Musk,MEDIUM,Every 2hr,Tech/Macro
+@Eunicedwong,Alpha Trader,MEDIUM,Every 2hr,Trading/Alpha
+@Excellion,Samson Mow,MEDIUM,Every 2hr,Bitcoin/Adoption
+@FabianoSolana,fabiano.sol,MEDIUM,Every 2hr,DeFi/Solana
+@frankdegods,Frank DeGods,HIGH,Every 30min,Solana/NFT
+@GarethSoloway,Pro Trader TA,HIGH,Every 30min,Trading/TA
+@Ga__ke,gake,MEDIUM,Every 2hr,Trading/Alpha
+@gemhuntersco,Gem Hunters,HIGH,Every 30min,Alpha/Gems
+@gmaborabot,GMGN — Smart money trending + top traders,MEDIUM,Every 60min,SmartMoney/Trending
+@gm_dot_ai,gm.ai,MEDIUM,Every 2hr,AI/Solana
+@gnarleyjs,gnarleyquinn,HIGH,Every 30min,Alpha/Analysis
+@GOATDwtf,GOAT'D,HIGH,Every 30min,Alpha/Tracking
+@GoatIndexAI,GoatIndex.ai,MEDIUM,Every 2hr,AI/Solana
+@GooseXBT,Goose,HIGH,Every 30min,VC/Trading
+@Greed2Fear,Futures trader,MEDIUM,Every 2hr,Trading/Derivatives
+@gumsays,Solana advisor,MEDIUM,Every 2hr,Solana/Advisory
+@HenrikZeberg,Henrik Zeberg,HIGH,Every 30min,Macro/Analysis
+@HovWaves,Elliott Wave,HIGH,Every 30min,Analysis/TA
+@humafinance,Huma Finance,MEDIUM,Every 2hr,DeFi/RWA
+@intocryptoverse,Benjamin Cowen,HIGH,Every 30min,Analysis/Macro
+@Investanswers,InvestAnswers,HIGH,Every 30min,Analysis/Education
+@ionet,io.net GPUs,MEDIUM,Every 2hr,AI/Infrastructure
+@jackmallers,Jack Mallers,MEDIUM,Every 2hr,Bitcoin/Builder
+@JamesWynnReal,James Wynn,HIGH,Every 30min,Trading/Whale
+@jessicasmw,Binance Media,MEDIUM,Every 2hr,Exchange/Media
+@jito_sol,Jito staking,HIGH,Every 30min,Solana/DeFi
+@JoeConsorti,Joe Consorti,MEDIUM,Every 2hr,Bitcoin/Builder
+@JUPANDJUICE,JUP AND JUICE,MEDIUM,Every 2hr,Solana Ecosystem
+@JupiterExchange,Jupiter official,HIGH,Every 30min,Solana/DeFi
+@jup_dao,JupiterDAO,HIGH,Every 30min,DeFi/Solana
+@jup_uplink,Jupiter Uplink,MEDIUM,Every 2hr,Solana Ecosystem
+@KaitoAI,Kaito AI,HIGH,Every 30min,AI/Analytics
+@kamino,Kamino credit,HIGH,Every 30min,Solana/DeFi
+@kashdhanda,Kash,HIGH,Every 30min,Solana Ecosystem
+@KingzCrypt,Sharkz Tank,MEDIUM,Every 2hr,Trading/Community
+@kolscan_io,KOLScan — Real-time KOL transactions + PnL leaderboard (Pump.fun),HIGH,Every 30min,SmartMoney/KOL
+@KonstSolana,Konstantinos,HIGH,Every 30min,Solana Ecosystem
+@LairFNF,Lair,MEDIUM,Every 2hr,Trading/On-chain
+@LomahCrypto,Loma,MEDIUM,Every 2hr,Trading/VC
+@lukebelmar,Luke Belmar,MEDIUM,Every 2hr,Trading/Community
+@LynAldenContact,Lyn Alden,HIGH,Every 30min,Macro/Analysis
+@MarketLabGroup,Markets analysis,MEDIUM,Every 2hr,Markets/Analysis
+@matija_sol,SuperteamBLKN,MEDIUM,Every 2hr,Solana/Community
+@mauritsneo,Maurits,MEDIUM,Every 2hr,Trading/Crypto
+@MEFadn,$ME,MEDIUM,Every 2hr,NFT/Solana
+@mert,CEO Helius,HIGH,Every 30min,Solana/Infrastructure
+@metadev5,metadev,MEDIUM,Every 2hr,Solana/Dev
+@MeteoraAG,Meteora,HIGH,Every 30min,DeFi/Solana
+@mew,MEW,MEDIUM,Every 2hr,Memecoin/Solana
+@monad,Monad L1,MEDIUM,Every 2hr,Infrastructure/L1
+@moneypenny_sol,Moneypenny,MEDIUM,Every 2hr,Tools/Solana
+@MonkeDAO,MonkeDAO,MEDIUM,Every 2hr,DAO/Solana
+@moonshot,Moonshot,MEDIUM,Every 2hr,Memecoin/Platform
+@musamanzz,Musa,MEDIUM,Every 2hr,AI/Content
+@nansen_ai,Nansen,HIGH,Every 30min,Analytics/On-chain
+@nick_havryliak,Nick Havryliak,MEDIUM,Every 2hr,AI/Infrastructure
+@nic_carter,Nic Carter,HIGH,Every 30min,Bitcoin/Analysis
+@NikolausHOff,Nikolaus Hoffman,MEDIUM,Every 2hr,Bitcoin/Media
+@nosana_ai,Nosana,MEDIUM,Every 2hr,AI/Solana
+@OndoFinance,Ondo Finance,HIGH,Every 30min,DeFi/RWA
+@orangie,Orangie,MEDIUM,Every 2hr,Trading/Content
+@paddi_hansen,EU crypto policy,MEDIUM,Every 2hr,Regulation/Policy
+@Parcl,Parcl official,MEDIUM,Every 2hr,Solana/DeFi
+@ParclIntern,Parcl,MEDIUM,Every 2hr,Solana/DeFi
+@pete_rizzo_,The Bitcoin Historian,MEDIUM,Every 2hr,Bitcoin/History
+@Phoenix_Ash3s,Crypto trader,MEDIUM,Every 2hr,Trading
+@pierre_crypt0,Pierre,MEDIUM,Every 2hr,Trading/Alpha
+@polymonger,polymonger.sol,MEDIUM,Every 2hr,Solana/Content
+@PrimitiveMoney,Primitive,MEDIUM,Every 2hr,Trading/Crypto
+@pudgypenguins,Pudgy Penguins,MEDIUM,Every 2hr,NFT
+@Pumpfun,Pump.fun,HIGH,Every 30min,Solana Ecosystem
+@RaoulGMI,Raoul Pal,HIGH,Every 30min,Macro/Analysis
+@Raydium,Raydium,HIGH,Every 30min,DeFi/Solana
+@rektradio,Rekt Radio,MEDIUM,Every 2hr,Podcast/Crypto
+@saros_xyz,Saros,MEDIUM,Every 2hr,DeFi/Solana
+@SavageCharts,SOL charts,HIGH,Every 30min,Solana/TA
+@SAXweb3,SAX,MEDIUM,Every 2hr,Solana Ecosystem
+@scottmelker,Wolf Of All Streets,HIGH,Every 30min,Analysis/Media
+@SeedifyFund,Seedify,MEDIUM,Every 2hr,Launchpad
+@SenseiSOL,Sensei,MEDIUM,Every 2hr,Solana/Community
+@shadid_io,io.net ollm,MEDIUM,Every 2hr,AI/Infrastructure
+@sistineresearch,AI dashboard,MEDIUM,Every 2hr,AI/Analytics
+@SnorkelCapital,Gilgamesh,MEDIUM,Every 2hr,NFT/Trading
+@solana,Solana official,MEDIUM,Every 2hr,Infrastructure/L1
+@SolanaFloor,Solana news,HIGH,Every 30min,Solana/News
+@SolanaLegend,FrictionlessVC,MEDIUM,Every 2hr,Solana/VC
+@SolanaMBS,Solana Monkey Business,MEDIUM,Every 2hr,NFT/Solana
+@solanamobile,Solana Mobile,MEDIUM,Every 2hr,Solana/Hardware
+@SolanaTopGun,Solana Trading,MEDIUM,Every 2hr,Solana/Trading
+@SOLFisTooShort,SoLF (trading arc),HIGH,Every 30min,Alpha/Trading
+@soy_muse,MUSE,MEDIUM,Every 2hr,Solana Ecosystem
+@sssionggg,SIONG,HIGH,Every 30min,Solana Ecosystem
+@StalkHQ,Stalkchain — KOL accumulation alerts + cabal finder,HIGH,Every 30min,SmartMoney/Discovery
+@stephanlivera,Stephan Livera,MEDIUM,Every 2hr,Bitcoin/Podcast
+@SunFlowSolana,SunFlow — Whale flow alerts with precise entry timing + DCA tracking,HIGH,Every 30min,SmartMoney/WhaleFlow
+@superteam,Superteam,HIGH,Every 30min,Solana Ecosystem
+@TechDev_52,Crypto analysis,HIGH,Every 30min,Analysis/TA
+@TheBreakdownBW,The Breakdown,HIGH,Every 30min,Podcast/Macro
+@TheCryptoData,CryptoData,MEDIUM,Every 2hr,Trading/Alpha
+@theDCApod,The DCA Pod,MEDIUM,Every 2hr,Podcast/Crypto
+@TheHavenCrypto,The Haven,MEDIUM,Every 2hr,Education/Trading
+@TheKryptoBorz,The Krypto Borz,MEDIUM,Every 2hr,Trading/Bots
+@thekryptoking_,King,MEDIUM,Every 2hr,AI/Trading
+@therealmiso2049,Miso,MEDIUM,Every 2hr,Crypto/Builder
+@TheRoaringKitty,Roaring Kitty,MEDIUM,Every 2hr,Meme/Trading
+@The_Coiners,The Coiners,MEDIUM,Every 2hr,Alpha/Community
+@toly,Solana Labs,HIGH,Every 30min,Solana/Infrastructure
+@Tradermayne,Mayne,HIGH,Every 30min,Trading/Analysis
+@trenchesalpha,The Trenches,HIGH,Every 30min,AI/Alpha
+@TS9_ONE,Intelligence,MEDIUM,Every 2hr,Intelligence
+@USDWONTRON,USDWON,MEDIUM,Every 2hr,Trading/Quant
+@weremeow,meow Jupiter,HIGH,Every 30min,Solana/DeFi
+@wonspacemagic,wonspace,MEDIUM,Every 2hr,Solana/Trading
+@yawn_rong,Co-founder FSL,MEDIUM,Every 2hr,STEPN/FSL
+@ZoomerOracle,Zoomer Oracle,MEDIUM,Every 2hr,VC/Alpha
+@___ProfessorX,AI projects,MEDIUM,Every 2hr,AI/Alpha

@@ -42,6 +42,7 @@ EXPECTED_TASKS = {
     "infra_discovery": 1440,
     "lifecycle_check": 1440,
     "watch_recheck": SCAN_INTERVAL_MINUTES,
+    "smart_money_poll": 30,     # 30-min poll cycle
 }
 
 
@@ -239,6 +240,22 @@ def _lifecycle_check():
     record_run_completion("lifecycle_check")
 
 
+def _smart_money_poll():
+    """Poll smart money X accounts via Grok API."""
+    log.info("=== Smart money X poll ===")
+    try:
+        from social.grok_poller import run_smart_money_poll
+        result = run_smart_money_poll()
+        total = result.get("total_signals", 0)
+        if total > 0:
+            log.info("Smart money poll: %d new signals", total)
+        else:
+            log.debug("Smart money poll: no new signals")
+    except Exception as e:
+        log.error("Smart money poll failed: %s", e)
+    record_run_completion("smart_money_poll")
+
+
 def _silence_check():
     """Periodic: check for missed scheduled runs."""
     try:
@@ -261,6 +278,9 @@ def run_scanner():
     except Exception as e:
         log.error("Failed to start bot polling: %s", e)
 
+    # Run first smart money poll immediately
+    _smart_money_poll()
+
     # Run first scan cycle immediately
     _scan_cycle()
 
@@ -276,6 +296,7 @@ def run_scanner():
     schedule.every(4).hours.do(_momentum_snapshot)
     schedule.every().day.at("06:00").do(_nightly_report)
     schedule.every().day.at("06:30").do(_lifecycle_check)
+    schedule.every(SCAN_INTERVAL_MINUTES).minutes.do(_smart_money_poll)
     schedule.every(5).minutes.do(_silence_check)
 
     while True:

@@ -30,6 +30,7 @@ Commands:
   python main.py shadow-report               Print shadow trading summary
   python main.py seed-kols                   Seed KOL wallet database
   python main.py huoyan                      Generate and send Huoyan pulse
+  python main.py grok-poll                   One-time smart money X poll
 """
 
 import sys
@@ -346,6 +347,13 @@ def main():
         results = run_youtube_scan()
         print(f"YouTube scan complete: {len(results)} new videos processed")
 
+    elif cmd == "youtube-check":
+        # Alias for youtube-scan
+        log.info("Running YouTube channel check")
+        from social.youtube_free import run_youtube_scan
+        results = run_youtube_scan()
+        print(f"YouTube check complete: {len(results)} new videos processed")
+
     elif cmd == "youtube-digest":
         log.info("Running YouTube daily digest")
         from social.youtube_free import run_daily_digest
@@ -413,6 +421,17 @@ def main():
         from telegram_bot.huoyan_pulse import generate_pulse
         report = generate_pulse()
         print(report)
+
+    elif cmd == "grok-poll":
+        log.info("Running one-time smart money X poll")
+        from social.grok_poller import run_smart_money_poll
+        result = run_smart_money_poll()
+        print(f"\nSmart Money Poll Results:")
+        print(f"  Total new signals: {result.get('total_signals', 0)}")
+        for handle, count in result.get("per_account", {}).items():
+            print(f"  @{handle}: {count} signals")
+        if result.get("errors"):
+            print(f"  Errors: {', '.join(result['errors'])}")
 
     else:
         # Assume it's a token address

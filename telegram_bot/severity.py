@@ -66,7 +66,10 @@ def classify_alert(alert_type: str, **kwargs) -> int:
     # Tier 2: CHECK WHEN FREE
     if alert_type in ('gate_pass_scored', 'state_change', 'kolscan_convergence',
                        'kk_call', 'regime_change', 'entry_executed',
-                       'kol_tier2_buy', 'health_warning'):
+                       'kol_tier2_buy', 'health_warning',
+                       'smart_money_strong_accumulation',
+                       'smart_money_strong_whale_flow',
+                       'smart_money_multi_kol'):
         return 2
     if alert_type == 'gate_pass' and kwargs.get('health_score', 0) > 65:
         return 2
@@ -74,7 +77,7 @@ def classify_alert(alert_type: str, **kwargs) -> int:
     # Tier 3: BATCHED
     if alert_type in ('scanner_count', 'social_velocity', 'holder_shift',
                        'youtube_mention', 'unlock_approaching', 'price_milestone',
-                       'kol_tier2_activity'):
+                       'kol_tier2_activity', 'smart_money_medium_signal'):
         return 3
 
     # Tier 4: LOGGED ONLY

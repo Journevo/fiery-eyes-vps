@@ -38,6 +38,12 @@ def generate_pulse(hour: int | None = None) -> str:
     # KOL Activity
     lines.extend(_kol_activity_section())
 
+    # YouTube Intel
+    lines.extend(_youtube_section())
+
+    # X Smart Money Intelligence
+    lines.extend(_x_intelligence_section())
+
     # Batched Tier 3 alerts
     batch = flush_huoyan_batch()
     if batch:
@@ -180,6 +186,67 @@ def _kol_activity_section() -> list[str]:
     except Exception as e:
         log.debug("KOL activity section: %s", e)
         lines.append("  KOL data unavailable")
+
+    lines.append("")
+    return lines
+
+
+def _youtube_section() -> list[str]:
+    """YouTube intel from last 4 hours."""
+    lines = ["<b>📺 YouTube Intel</b>"]
+    try:
+        rows = execute(
+            """SELECT channel_name, title, analysis_json, relevance_score
+               FROM youtube_videos
+               WHERE published_at > NOW() - INTERVAL '4 hours'
+                 AND relevance_score > 5
+               ORDER BY relevance_score DESC
+               LIMIT 3""",
+            fetch=True,
+        )
+        if rows:
+            for channel, title, analysis, score in rows:
+                aj = analysis if isinstance(analysis, dict) else {}
+                outlook = aj.get("overall_outlook", "neutral")
+                icon = {"bullish": "🟢", "bearish": "🔴"}.get(outlook, "🟡")
+                tokens = aj.get("tokens_mentioned", [])
+                tok_str = ", ".join(t.get("symbol", "") for t in tokens[:3]) if tokens else ""
+                line = f"  {icon} {channel}: \"{(title or '')[:40]}\" — {outlook}"
+                if tok_str:
+                    line += f", mentioned {tok_str}"
+                lines.append(line)
+        else:
+            lines.append("  ⚪ No relevant videos in 4h")
+    except Exception as e:
+        log.debug("YouTube section error: %s", e)
+        lines.append("  YouTube data unavailable")
+
+    lines.append("")
+    return lines
+
+
+def _x_intelligence_section() -> list[str]:
+    """X smart money signals from last 4 hours."""
+    lines = ["<b>📡 X Intelligence</b>"]
+    try:
+        from social.grok_poller import get_recent_x_signals
+        signals = get_recent_x_signals(hours=4, min_strength="medium")
+        if signals:
+            for sig in signals[:5]:
+                handle = sig.get("source_handle", "?")
+                ptype = sig.get("parsed_type", "info")
+                symbol = sig.get("token_symbol") or "?"
+                strength = sig.get("signal_strength", "?")
+                amount = sig.get("amount_usd")
+
+                icon = "🔴" if strength == "strong" else "🟡"
+                amount_str = f" (${amount:,.0f})" if amount else ""
+                lines.append(f"  {icon} {handle}: {ptype} ${symbol}{amount_str} [{strength}]")
+        else:
+            lines.append("  ⚪ No smart money signals in 4h")
+    except Exception as e:
+        log.debug("X intelligence section error: %s", e)
+        lines.append("  X data unavailable")
 
     lines.append("")
     return lines
