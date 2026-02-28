@@ -30,18 +30,23 @@ INTERVAL_ESTABLISHED = 14400
 INTERVAL_HUOYAN = 14400
 INTERVAL_REGIME = 14400
 
-# Last run timestamps
+# Last run timestamps — staggered so Helius-heavy tasks cascade on startup
+# instead of all firing on the first tick.
+_now = time.time()
 _last_run = {
-    'tier1_kol': 0,
-    'tier2_kol': 0,
-    'hatchling': 0,
-    'runner': 0,
-    'smart_money': 0,
-    'established': 0,
-    'huoyan': 0,
-    'regime': 0,
+    'tier1_kol': _now,            # first fire at +180s
+    'tier2_kol': _now,            # first fire at +600s
+    'hatchling': _now - 840,      # first fire at +60s
+    'runner': _now - 1680,        # first fire at +120s
+    'smart_money': _now,          # first fire at +1800s (no Helius)
+    'established': _now,          # first fire at +14400s
+    'huoyan': _now,
+    'regime': _now,
     'moonbag_reaper': 0,
 }
+
+# Mutex to prevent KOL polling and health scoring from hitting Helius concurrently
+_helius_busy = threading.Lock()
 
 
 def _should_run(task: str, interval: int) -> bool:
@@ -56,15 +61,23 @@ def _mark_run(task: str):
 
 def run_tier1_kol():
     """Check Tier 1 KOL wallets only."""
+    if not _helius_busy.acquire(blocking=False):
+        log.debug("Skipping Tier 1 KOL — Helius busy")
+        return
     try:
         from kol_tracking.monitor import check_kol_wallets
         check_kol_wallets(tier_filter=1)
     except Exception as e:
         log.error("Tier 1 KOL check failed: %s", e)
+    finally:
+        _helius_busy.release()
 
 
 def run_tier2_kol():
     """Check Tier 2 KOL wallets + convergence detection."""
+    if not _helius_busy.acquire(blocking=False):
+        log.debug("Skipping Tier 2 KOL — Helius busy")
+        return
     try:
         from kol_tracking.monitor import check_kol_wallets, detect_convergence
         check_kol_wallets(tier_filter=2)
@@ -78,10 +91,15 @@ def run_tier2_kol():
                 route_alert(2, msg)
     except Exception as e:
         log.error("Tier 2 KOL check failed: %s", e)
+    finally:
+        _helius_busy.release()
 
 
 def run_health_scoring(tier: str):
     """Score tokens of a given tier."""
+    if not _helius_busy.acquire(blocking=False):
+        log.debug("Skipping health scoring (%s) — Helius busy", tier)
+        return
     try:
         from db.connection import execute
         from health_score.engine import score_token
@@ -112,6 +130,8 @@ def run_health_scoring(tier: str):
             log.info("Scored %d %s tokens", scored, tier)
     except Exception as e:
         log.error("Health scoring (%s) failed: %s", tier, e)
+    finally:
+        _helius_busy.release()
 
 
 def run_huoyan():
@@ -190,12 +210,12 @@ def main_loop():
         try:
             now = datetime.now(timezone.utc)
 
-            # Tier 1 KOL wallets — every 60s
+            # Tier 1 KOL wallets — every 3min
             if _should_run('tier1_kol', INTERVAL_TIER1_KOL):
                 threading.Thread(target=run_tier1_kol, daemon=True).start()
                 _mark_run('tier1_kol')
 
-            # Tier 2 KOL wallets — every 5min
+            # Tier 2 KOL wallets — every 10min
             if _should_run('tier2_kol', INTERVAL_TIER2_KOL):
                 threading.Thread(target=run_tier2_kol, daemon=True).start()
                 _mark_run('tier2_kol')
