@@ -45,13 +45,13 @@ TIER_B_MIN = 50
 # and community research. Used as fallback when GMGN API is blocked (Cloudflare).
 # Stats are approximate, from GMGN/Cielo at time of curation.
 SEED_WALLETS = [
-    # --- Known KOLs (already in kol_wallets, cross-referenced here) ---
+    # --- Known KOLs (also in kol_wallets for tx monitoring) ---
     {"address": "AVAZvHLR2PcWpDf8BXY4rVxNHYRBytycHkcB5z5QNXYm",
      "name": "Ansem", "winrate": 0.65, "pnl_30d": 200000, "pnl_7d": 45000,
      "buy_30d": 40, "sell_30d": 35, "notes": "Narrative caller, post-WIF mixed"},
     {"address": "DNfuF1L62WWyW3pNakVkyGGFzVVhj4Yr52jSmdTyeBHm",
      "name": "Gake", "winrate": 0.42, "pnl_30d": 2480000, "pnl_7d": 400000,
-     "buy_30d": 350, "sell_30d": 340, "notes": "$2.48M profit, 23 trades/day"},
+     "buy_30d": 350, "sell_30d": 340, "notes": "$2.48M profit, 42% WR but volume king"},
     {"address": "CRVidEDtEUTYZisCxBZkpELzhQc9eauMLR3FWg74tReL",
      "name": "Frank (DeGods)", "winrate": 0.70, "pnl_30d": 350000, "pnl_7d": 80000,
      "buy_30d": 25, "sell_30d": 20, "notes": "DeGods founder, big conviction plays"},
@@ -65,25 +65,68 @@ SEED_WALLETS = [
      "name": "Truth Terminal", "winrate": 0.75, "pnl_30d": 500000, "pnl_7d": 120000,
      "buy_30d": 15, "sell_30d": 10, "notes": "AI agent wallet, conviction plays"},
 
-    # --- GMGN leaderboard regulars (well-known smart money addresses) ---
-    {"address": "BmxHFhstaxnRJTakWNRGSBCsYFXh7VEzFJR8LyFa6fVL",
-     "name": "Taiyo", "winrate": 0.72, "pnl_30d": 310000, "pnl_7d": 75000,
-     "buy_30d": 85, "sell_30d": 78, "notes": "GMGN top trader, early entries"},
-    {"address": "6VTzPRKSSEPpNBhqb31i5P5Ks7p1X57FiWq69gNyZBef",
-     "name": "Solana Whale 1", "winrate": 0.67, "pnl_30d": 260000, "pnl_7d": 55000,
-     "buy_30d": 95, "sell_30d": 88, "notes": "Large position sizes, consistent"},
+    # --- Murad Mahmudov (3 Solana wallets, ZachXBT identified) ---
+    {"address": "7QZGS7MQ4S6hRmE8iXoFTXgQ2hXVUCho2ZhgeWvLNPZT",
+     "name": "Murad 1", "winrate": 0.75, "pnl_30d": 500000, "pnl_7d": 120000,
+     "buy_30d": 15, "sell_30d": 15, "notes": "Murad main — SPX6900 61x, conviction holds"},
+    {"address": "GyBkVYkHBPMapyQeueQ6d44YthwqYiX4ajgnGLqq9P7r",
+     "name": "Murad 2", "winrate": 0.75, "pnl_30d": 300000, "pnl_7d": 70000,
+     "buy_30d": 12, "sell_30d": 13, "notes": "Murad alt — bought MINI before public post"},
+    {"address": "2xn57hPD2v6ighJFPXNPSoiGUXkW4KKo8Hb3NpXmHZvZ",
+     "name": "Murad 3", "winrate": 0.70, "pnl_30d": 150000, "pnl_7d": 35000,
+     "buy_30d": 10, "sell_30d": 10, "notes": "Murad alt — deBridge funded"},
+
+    # --- Nansen Top 10 Memecoin Smart Money (verified, labeled) ---
+    {"address": "4EtAJ1p8RjqccEVhEhaYnEgQ6kA4JHR8oYqyLFwARUj6",
+     "name": "Trump Whale", "winrate": 0.68, "pnl_30d": 260000, "pnl_7d": 60000,
+     "buy_30d": 120, "sell_30d": 115, "notes": "Nansen #1 — 97% avg ROI/trade"},
+    {"address": "8zFZHuSRuDpuAR7J6FzwyF3vKNx4CVW3DFHJerQhc7Zd",
+     "name": "traderpow", "winrate": 0.72, "pnl_30d": 14800000, "pnl_7d": 3000000,
+     "buy_30d": 100, "sell_30d": 95, "notes": "Nansen #3 — $14.8M profits"},
+    {"address": "8mZYBV8aPvPCo34CyCmt6fWkZRFviAUoBZr1Bn993gro",
+     "name": "popchad.sol", "winrate": 0.65, "pnl_30d": 7240000, "pnl_7d": 1500000,
+     "buy_30d": 50, "sell_30d": 45, "notes": "Nansen #4 — $7.24M realized"},
+    {"address": "5CP6zv8a17mz91v6rMruVH6ziC5qAL8GFaJzwrX9Fvup",
+     "name": "naseem", "winrate": 0.70, "pnl_30d": 8000000, "pnl_7d": 1800000,
+     "buy_30d": 30, "sell_30d": 25, "notes": "Nansen #5 — $8M SHROOM, sniper"},
+    {"address": "H2ikJvq8or5MyjvFowD7CDY6fG3Sc2yi4mxTnfovXy3K",
+     "name": "shatter.sol", "winrate": 0.72, "pnl_30d": 35000000, "pnl_7d": 8000000,
+     "buy_30d": 80, "sell_30d": 75, "notes": "Nansen #6 — $3M to $35M on TRUMP"},
+    {"address": "2h7s3FpSvc6v2oHke6Uqg191B5fPCeFTmMGnh5oPWhX7",
+     "name": "tonka.sol", "winrate": 0.68, "pnl_30d": 21800000, "pnl_7d": 5000000,
+     "buy_30d": 60, "sell_30d": 55, "notes": "Nansen #7 — 196% ROI, short-term"},
+    {"address": "HWdeCUjBvPP1HJ5oCJt7aNsvMWpWoDgiejUWvfFX6T7R",
+     "name": "Multi Memecoin", "winrate": 0.65, "pnl_30d": 9650000, "pnl_7d": 2000000,
+     "buy_30d": 85, "sell_30d": 80, "notes": "Nansen #8 — $9.65M realized"},
+    {"address": "4DPxYoJ5DgjvXPUtZdT3CYUZ3EEbSPj4zMNEVFJTd1Ts",
+     "name": "Sigil Fund", "winrate": 0.70, "pnl_30d": 6100000, "pnl_7d": 1400000,
+     "buy_30d": 45, "sell_30d": 40, "notes": "Nansen #9 — $6.1M profits, 820 trades"},
+    {"address": "Hwz4BDgtDRDBTScpEKDawshdKatZJh6z1SJYmRUxTxKE",
+     "name": "Anon HP", "winrate": 0.62, "pnl_30d": 500000, "pnl_7d": 100000,
+     "buy_30d": 15, "sell_30d": 12, "notes": "Nansen #10 — 127 trades, 30 tokens"},
+
+    # --- ChainCatcher top performers (from 1,080 wallet study) ---
+    {"address": "4Be9CvxqHW6BYiRAxW9Q3xu1ycTMWaL5z8NX4HR3ha7t",
+     "name": "CC 50x Flipper", "winrate": 0.68, "pnl_30d": 500000, "pnl_7d": 100000,
+     "buy_30d": 75, "sell_30d": 75, "notes": "ChainCatcher #10 — consistent 50x flips"},
+    {"address": "FTg1gqW7vPm4kdU1LPM7JJnizbgPdRDy2PitKw6mY27j",
+     "name": "CC Trader 7", "winrate": 0.63, "pnl_30d": 200000, "pnl_7d": 45000,
+     "buy_30d": 50, "sell_30d": 45, "notes": "ChainCatcher #7 — mid-tier consistent"},
+    {"address": "69ngexW9UkgRp5KFjLpaK9XNSCxUFmps6jYmqhK3q6m9",
+     "name": "CC Trader 8", "winrate": 0.61, "pnl_30d": 180000, "pnl_7d": 40000,
+     "buy_30d": 55, "sell_30d": 50, "notes": "ChainCatcher #8 — high volume"},
+
+    # --- Other validated smart money ---
     {"address": "orcACRJYTFjTeo2pV8TfYRTpmqfoYgbVi9GeANXTCc8",
      "name": "Orca Whale", "winrate": 0.70, "pnl_30d": 190000, "pnl_7d": 42000,
      "buy_30d": 50, "sell_30d": 45, "notes": "DEX whale, narrative rotation"},
-    {"address": "7Ppgch9d4nCBquE5R9VLVHSwGiXMsh5ZMKqt8XqDtT3L",
-     "name": "Alpha Hunter", "winrate": 0.65, "pnl_30d": 145000, "pnl_7d": 32000,
-     "buy_30d": 110, "sell_30d": 100, "notes": "High volume scanner"},
     {"address": "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP",
      "name": "Meme Expert", "winrate": 0.63, "pnl_30d": 120000, "pnl_7d": 28000,
      "buy_30d": 130, "sell_30d": 120, "notes": "Memecoin specialist, high volume"},
-    {"address": "CKs8M7KJiahHbF8BZbHHrMy89Q9tNFFchHVfCLMgq4q2",
-     "name": "Smart Degen", "winrate": 0.61, "pnl_30d": 88000, "pnl_7d": 19000,
-     "buy_30d": 75, "sell_30d": 68, "notes": "Moderate performer, stable returns"},
+
+    # NOTE: Cupsey & Orangie excluded — 900+ trades/day burns Helius credits
+    # NOTE: cifwifhatday.sol excluded — wallet empty on-chain
+    # NOTE: CC #1 (6FNbu3i...) excluded — 100% WR over 42 trades, likely bot
 ]
 
 
