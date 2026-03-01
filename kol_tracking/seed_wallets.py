@@ -27,14 +27,7 @@ SEED_WALLETS = [
         "trades_per_day": 23,
         "notes": "$2.48M profit, ~42% win rate, 23 trades/day",
     },
-    {
-        "name": "Frank (DeGods)",
-        "wallet_address": "CRVidEDtEUTYZisCxBZkpELzhQc9eauMLR3FWg74tReL",
-        "tier": 1,
-        "style": "conviction",
-        "conviction_filter_min_usd": 1000,
-        "notes": "DeGods founder, big conviction plays",
-    },
+    # NOTE: Frank (DeGods) removed — dust trades ($1-6), deactivated
 
     # Tier 2 — Monitor only (confirmation signal)
     # NOTE: Cupsey & Orangie REMOVED from wallet tracking (900+ trades/day

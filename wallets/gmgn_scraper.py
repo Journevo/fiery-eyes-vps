@@ -15,7 +15,7 @@ import math
 import time
 from datetime import datetime, timezone, timedelta
 
-from config import HELIUS_RPC_URL, get_logger
+from config import HELIUS_RPC_URL, GMGN_PROXY_URL, get_logger
 from db.connection import execute, execute_one
 from quality_gate.helpers import get_json, post_json
 from monitoring.degraded import record_api_call
@@ -138,13 +138,16 @@ def _fetch_gmgn_leaderboard(limit: int = 200) -> list[dict]:
     url = (f"{GMGN_LEADERBOARD_URL}"
            f"?orderby=pnl_7d&direction=desc&limit={limit}")
     try:
-        data = get_json(url, headers={
+        kwargs = {"headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                           "AppleWebKit/537.36 (KHTML, like Gecko) "
                           "Chrome/120.0.0.0 Safari/537.36",
             "Accept": "application/json",
             "Referer": "https://gmgn.ai/",
-        })
+        }}
+        if GMGN_PROXY_URL:
+            kwargs["proxies"] = {"https": GMGN_PROXY_URL, "http": GMGN_PROXY_URL}
+        data = get_json(url, **kwargs)
         record_api_call("gmgn", True)
 
         if not data or data.get("code") != 0:

@@ -24,6 +24,7 @@ YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 YOUTUBE_COOKIES_FILE = os.getenv("YOUTUBE_COOKIES_FILE", str(Path(__file__).parent / "cookies.txt"))
 APIFY_API_KEY = os.getenv("APIFY_API_KEY", "")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres@localhost:5432/fiery_eyes")
+GMGN_PROXY_URL = os.getenv("GMGN_PROXY_URL", "")
 
 # --- KOL Tracking ---
 # HELIUS_API_KEY is defined above

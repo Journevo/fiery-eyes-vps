@@ -34,6 +34,7 @@ Commands:
   python main.py gmgn-scrape                 One-time GMGN wallet scrape
   python main.py gmgn-status                 Show GMGN wallet fleet status
   python main.py resolve-tokens              Backfill token symbols → addresses
+  python main.py seed-from-gmgn              Seed KOL wallets from GMGN fleet
   python main.py smart-radar                 One-time convergence radar check
 """
 
@@ -467,6 +468,30 @@ def main():
         print(f"\nToken Resolution Backfill:")
         print(f"  Resolved: {result['resolved']}/{result['total']}")
         print(f"  Skipped:  {result['skipped']}")
+
+    elif cmd == "seed-from-gmgn":
+        log.info("Seeding KOL wallets from GMGN fleet")
+        from wallets.gmgn_scraper import get_gmgn_wallets
+        from db.connection import execute
+        tier_min_usd = {"A": 2000, "B": 1000, "C": 500}
+        gmgn = get_gmgn_wallets()
+        inserted = 0
+        for w in gmgn:
+            min_usd = tier_min_usd.get(w["tier"], 500)
+            try:
+                execute(
+                    """INSERT INTO kol_wallets
+                       (name, wallet_address, tier, style, conviction_filter_min_usd,
+                        win_rate, notes)
+                       VALUES (%s, %s, 2, 'gmgn_smart_money', %s, %s, %s)
+                       ON CONFLICT (wallet_address) DO NOTHING""",
+                    (w["display_name"], w["wallet_address"], min_usd,
+                     w["win_rate"], f"GMGN Tier {w['tier']}, score={w['gmgn_score']:.0f}"),
+                )
+                inserted += 1
+            except Exception as e:
+                log.error("Failed to seed %s: %s", w["display_name"], e)
+        print(f"Seeded {inserted} GMGN wallets into kol_wallets (ON CONFLICT DO NOTHING)")
 
     elif cmd == "smart-radar":
         log.info("Running smart money convergence radar")
