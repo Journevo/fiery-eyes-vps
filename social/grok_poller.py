@@ -314,6 +314,17 @@ def _is_already_processed(tweet_id: str) -> bool:
 def _store_signal(handle: str, tweet_id: str, tweet_text: str,
                    parsed: dict) -> bool:
     """Store a parsed signal in x_intelligence. Returns True if new row inserted."""
+    # Resolve symbol → address if missing
+    if parsed.get("token_symbol") and not parsed.get("token_address"):
+        try:
+            from social.token_resolver import resolve_token
+            result = resolve_token(parsed["token_symbol"])
+            if result:
+                parsed["token_address"] = result["address"]
+        except Exception as e:
+            log.debug("Token resolve failed for $%s: %s",
+                      parsed.get("token_symbol"), e)
+
     try:
         execute(
             """INSERT INTO x_intelligence

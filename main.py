@@ -33,6 +33,7 @@ Commands:
   python main.py grok-poll                   One-time smart money X poll
   python main.py gmgn-scrape                 One-time GMGN wallet scrape
   python main.py gmgn-status                 Show GMGN wallet fleet status
+  python main.py resolve-tokens              Backfill token symbols → addresses
   python main.py smart-radar                 One-time convergence radar check
 """
 
@@ -458,6 +459,14 @@ def main():
             for w in top[:5]:
                 print(f"    {w['display_name']}: score={w['gmgn_score']:.0f} "
                       f"wr={w['win_rate']:.0%} pnl=${w['pnl_usd']:,.0f}")
+
+    elif cmd == "resolve-tokens":
+        log.info("Backfilling token symbols → addresses")
+        from social.token_resolver import backfill_x_intelligence
+        result = backfill_x_intelligence()
+        print(f"\nToken Resolution Backfill:")
+        print(f"  Resolved: {result['resolved']}/{result['total']}")
+        print(f"  Skipped:  {result['skipped']}")
 
     elif cmd == "smart-radar":
         log.info("Running smart money convergence radar")
