@@ -24,6 +24,55 @@ SYMBOL_RE = re.compile(r'\$([A-Za-z][A-Za-z0-9]{1,14})\b')
 EXCLUDE_SYMBOLS = {'USD', 'SOL', 'BTC', 'ETH', 'USDT', 'USDC', 'BNB',
                    'BUSD', 'DAI', 'WETH', 'WSOL', 'ARB', 'OP'}
 
+# Bare ALL-CAPS token symbols (no $ prefix): "PYTH is", "bought TAO"
+BARE_CAPS_RE = re.compile(r'\b([A-Z][A-Z0-9]{1,9})\b')
+# Common English/crypto words that look like tickers but aren't
+BARE_CAPS_EXCLUDE = EXCLUDE_SYMBOLS | {
+    'THE', 'AND', 'FOR', 'NOT', 'BUT', 'ARE', 'WAS', 'HAS', 'HAD', 'HIS',
+    'HER', 'OUR', 'YOU', 'ALL', 'CAN', 'DID', 'GET', 'GOT', 'HAS', 'HIM',
+    'HOW', 'ITS', 'LET', 'MAY', 'NEW', 'NOW', 'OLD', 'OWN', 'SAY', 'SHE',
+    'TOO', 'USE', 'WAY', 'WHO', 'BOY', 'MAN', 'WIN', 'RUN', 'SET', 'TRY',
+    'ASK', 'MEN', 'RAN', 'ANY', 'BAD', 'BIG', 'END', 'FAR', 'FEW', 'GOD',
+    'GUY', 'LOW', 'PUT', 'TOP', 'YET', 'API', 'CEO', 'NFT', 'TVL', 'APY',
+    'DEX', 'CEX', 'ATH', 'ATL', 'OI', 'PNL', 'ROI', 'USD', 'DCA', 'RWA',
+    'ETF', 'IPO', 'CEO', 'CFO', 'CTO', 'COO', 'GDP', 'FED', 'SEC', 'DOJ',
+    'FBI', 'CIA', 'USA', 'UAE', 'AI', 'PR', 'TX', 'LP', 'MM', 'YTD', 'QE',
+    'GG', 'IMO', 'FWIW', 'DYOR', 'NFA', 'WAGMI', 'NGMI', 'GM', 'GN',
+    'JUST', 'FROM', 'THIS', 'THAT', 'WITH', 'HAVE', 'WILL', 'YOUR', 'WHAT',
+    'WHEN', 'MAKE', 'LIKE', 'TIME', 'VERY', 'BEEN', 'CALL', 'EACH', 'THAN',
+    'THEM', 'THEN', 'SOME', 'MORE', 'ALSO', 'BACK', 'ONLY', 'COME', 'MADE',
+    'FIND', 'HERE', 'KNOW', 'TAKE', 'WANT', 'DOES', 'LOOK', 'LONG', 'MUCH',
+    'REAL', 'RISK', 'HIGH', 'NEXT', 'BEST', 'LAST', 'OVER', 'SUCH', 'HUGE',
+    'LIVE', 'PUMP', 'DUMP', 'FOMO', 'HODL', 'BULL', 'BEAR', 'MOON', 'REKT',
+    'SEND', 'SELL', 'HOLD', 'SWAP', 'MINT', 'BURN', 'LOCK', 'DROP', 'FARM',
+    'POOL', 'LEND', 'LOAN', 'CCIP', 'WEEK', 'YEAR', 'HALF', 'FULL', 'OPEN',
+    'FREE', 'TRUE', 'SAME', 'DONE', 'GONE', 'EVEN', 'SURE', 'ONCE', 'GAVE',
+    'TOLD', 'LEFT', 'HARD', 'KEEP', 'STILL', 'THINK', 'EVERY', 'NEVER',
+    'START', 'MIGHT', 'WHERE', 'AFTER', 'COULD', 'OTHER', 'ABOUT', 'GREAT',
+    'GOING', 'RIGHT', 'BEING', 'WOULD', 'THEIR', 'WHICH', 'THERE', 'THESE',
+    'THOSE', 'FIRST', 'UNDER', 'NEEDS', 'HTTPS', 'HTTP', 'ALERT',
+}
+
+# Known crypto project names → symbol (lowercase name → uppercase symbol)
+# Only includes tokens that are commonly mentioned without $ prefix
+KNOWN_TOKEN_NAMES = {
+    'sui': 'SUI', 'pyth': 'PYTH', 'ondo': 'ONDO', 'jupiter': 'JUP',
+    'jup': 'JUP', 'render': 'RENDER', 'aave': 'AAVE', 'pendle': 'PENDLE',
+    'raydium': 'RAY', 'orca': 'ORCA', 'marinade': 'MNDE', 'jito': 'JTO',
+    'tensor': 'TNSR', 'drift': 'DRIFT', 'parcl': 'PRCL', 'wormhole': 'W',
+    'helium': 'HNT', 'bonk': 'BONK', 'dogwifhat': 'WIF', 'popcat': 'POPCAT',
+    'pepe': 'PEPE', 'floki': 'FLOKI', 'shib': 'SHIB', 'doge': 'DOGE',
+    'pengu': 'PENGU', 'pudgy': 'PENGU',
+    'hyperliquid': 'HYPE', 'tao': 'TAO', 'bittensor': 'TAO',
+    'fetch': 'FET', 'near': 'NEAR', 'avalanche': 'AVAX', 'avax': 'AVAX',
+    'chainlink': 'LINK', 'polkadot': 'DOT', 'cardano': 'ADA',
+    'uniswap': 'UNI', 'aethir': 'ATH_TOKEN', 'virtual': 'VIRTUAL',
+    'virtuals': 'VIRTUAL', 'plume': 'PLUME', 'redstone': 'RED',
+    'kamino': 'KMNO', 'marginfi': 'MRGN', 'sanctum': 'CLOUD',
+    'grass': 'GRASS', 'nosana': 'NOS', 'access': 'ACS',
+    'hive': 'HIVE', 'io.net': 'IO', 'shadow': 'SHDW',
+}
+
 # Dollar amount: $1,234 or $1.2K or $50K or $1.2M
 USD_PLAIN_RE = re.compile(r'\$([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]+)?)\b')
 USD_SUFFIX_RE = re.compile(r'\$([0-9]+(?:\.[0-9]+)?)\s*([KkMmBb])\b')
@@ -66,12 +115,31 @@ def _extract_usd_amount(text: str) -> float | None:
 
 
 def _extract_symbols(text: str) -> list[str]:
-    """Extract all $SYMBOL cashtag references from text."""
+    """Extract token symbols from text via cashtags, bare caps, and known names.
+
+    Priority: $CASHTAG > bare ALLCAPS > known project names.
+    """
     symbols = []
+
+    # 1. $CASHTAG (highest confidence)
     for m in SYMBOL_RE.finditer(text):
         sym = m.group(1).upper()
         if sym not in EXCLUDE_SYMBOLS:
             symbols.append(sym)
+
+    # 2. Known project names (e.g. "sui", "pyth", "hyperliquid")
+    text_lower = text.lower()
+    for name, sym in KNOWN_TOKEN_NAMES.items():
+        # Word boundary match — handles "pyth's", "sui,", "sui." etc.
+        if re.search(r'\b' + re.escape(name) + r"(?:'s)?\b", text_lower):
+            symbols.append(sym)
+
+    # 3. Bare ALL-CAPS words (e.g. "PYTH", "TAO", "SUI")
+    for m in BARE_CAPS_RE.finditer(text):
+        sym = m.group(1)
+        if len(sym) >= 2 and sym not in BARE_CAPS_EXCLUDE:
+            symbols.append(sym)
+
     # Deduplicate preserving order
     seen = set()
     result = []
@@ -415,10 +483,27 @@ if __name__ == "__main__":
     assert _extract_usd_amount("no money mentioned") is None
     print("  USD extraction: OK")
 
-    # Test symbol extraction
+    # Test symbol extraction — cashtags
     syms = _extract_symbols("$BONK and $WIF are hot, also $USDT")
     assert syms == ["BONK", "WIF"], f"Expected ['BONK', 'WIF'], got {syms}"
-    print("  Symbol extraction: OK")
+    print("  Symbol extraction (cashtags): OK")
+
+    # Test symbol extraction — bare ALLCAPS
+    syms2 = _extract_symbols("PYTH is the oracle layer, TAO has ETF catalysts")
+    assert "PYTH" in syms2, f"Expected PYTH in {syms2}"
+    assert "TAO" in syms2, f"Expected TAO in {syms2}"
+    print("  Symbol extraction (bare caps): OK")
+
+    # Test symbol extraction — known project names
+    syms3 = _extract_symbols("sui down 83% from ath but tvl hit $1B")
+    assert "SUI" in syms3, f"Expected SUI in {syms3}"
+    print("  Symbol extraction (known names): OK")
+
+    # Test symbol extraction — possessive form
+    syms4 = _extract_symbols("pyth's pull model and chainlink dominates")
+    assert "PYTH" in syms4, f"Expected PYTH in {syms4}"
+    assert "LINK" in syms4, f"Expected LINK in {syms4}"
+    print("  Symbol extraction (possessive): OK")
 
     # Test generic parser — cabal
     sample_g1 = "ALERT: Insider cabal detected on $DOGE — 15 wallets coordinated"
