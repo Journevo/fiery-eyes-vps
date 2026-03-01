@@ -173,7 +173,8 @@ def _kol_activity_section() -> list[str]:
                FROM kol_transactions kt
                JOIN kol_wallets kw ON kw.id = kt.kol_wallet_id
                WHERE kt.detected_at > NOW() - INTERVAL '4 hours'
-               ORDER BY kt.detected_at DESC LIMIT 5""",
+                 AND kt.amount_usd >= 500
+               ORDER BY kt.amount_usd DESC LIMIT 5""",
             fetch=True,
         )
         if rows:
