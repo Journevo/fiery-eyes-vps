@@ -44,6 +44,9 @@ def generate_pulse(hour: int | None = None) -> str:
     # X Smart Money Intelligence
     lines.extend(_x_intelligence_section())
 
+    # Smart Money Radar (convergence detection)
+    lines.extend(_smart_money_radar_section())
+
     # Batched Tier 3 alerts
     batch = flush_huoyan_batch()
     if batch:
@@ -247,6 +250,36 @@ def _x_intelligence_section() -> list[str]:
     except Exception as e:
         log.debug("X intelligence section error: %s", e)
         lines.append("  X data unavailable")
+
+    lines.append("")
+    return lines
+
+
+def _smart_money_radar_section() -> list[str]:
+    """Smart money convergence radar — cross-source wallet convergence."""
+    lines = ["<b>🎯 Smart Money Radar</b>"]
+    try:
+        from wallets.convergence_detector import get_radar_summary
+        radar = get_radar_summary()
+        if radar["active"] > 0:
+            for conv in radar["convergences"][:3]:
+                symbol = f"${conv['token_symbol']}" if conv.get("token_symbol") else conv["token_address"][:12]
+                level = conv["convergence_level"]
+                level_map = {
+                    "STRONG CONVERGENCE": "🔴",
+                    "EMERGING": "🟡",
+                    "WATCHING": "👀",
+                }
+                icon = level_map.get(level, "👀")
+                lines.append(
+                    f"  {icon} {symbol}: {conv['wallet_count']} wallets, "
+                    f"score {conv['weighted_score']:.1f} [{level}]"
+                )
+        else:
+            lines.append("  ⚪ No convergences active")
+    except Exception as e:
+        log.debug("Smart money radar section: %s", e)
+        lines.append("  Radar data unavailable")
 
     lines.append("")
     return lines

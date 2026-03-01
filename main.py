@@ -31,6 +31,9 @@ Commands:
   python main.py seed-kols                   Seed KOL wallet database
   python main.py huoyan                      Generate and send Huoyan pulse
   python main.py grok-poll                   One-time smart money X poll
+  python main.py gmgn-scrape                 One-time GMGN wallet scrape
+  python main.py gmgn-status                 Show GMGN wallet fleet status
+  python main.py smart-radar                 One-time convergence radar check
 """
 
 import sys
@@ -432,6 +435,42 @@ def main():
             print(f"  @{handle}: {count} signals")
         if result.get("errors"):
             print(f"  Errors: {', '.join(result['errors'])}")
+
+    elif cmd == "gmgn-scrape":
+        log.info("Running GMGN wallet scrape")
+        from wallets.gmgn_scraper import run_gmgn_scrape
+        result = run_gmgn_scrape()
+        print(f"\nGMGN Scrape Results:")
+        for k, v in result.items():
+            print(f"  {k}: {v}")
+
+    elif cmd == "gmgn-status":
+        log.info("GMGN wallet fleet status")
+        from wallets.gmgn_scraper import get_gmgn_summary, get_gmgn_wallets
+        summary = get_gmgn_summary()
+        print(f"\nGMGN Wallet Fleet:")
+        print(f"  Active: {summary['total_active']} wallets")
+        print(f"  Tier A: {summary['tier_a']} | Tier B: {summary['tier_b']} | Tier C: {summary['tier_c']}")
+        print(f"  Avg score: {summary['avg_score']:.1f} | Avg win rate: {summary['avg_win_rate']:.0%}")
+        top = get_gmgn_wallets(tier="A")
+        if top:
+            print(f"\n  Top Tier A wallets:")
+            for w in top[:5]:
+                print(f"    {w['display_name']}: score={w['gmgn_score']:.0f} "
+                      f"wr={w['win_rate']:.0%} pnl=${w['pnl_usd']:,.0f}")
+
+    elif cmd == "smart-radar":
+        log.info("Running smart money convergence radar")
+        from wallets.convergence_detector import run_convergence_check
+        result = run_convergence_check()
+        if result.get("convergences"):
+            print(f"\nSmart Money Convergences Found: {len(result['convergences'])}")
+            for c in result["convergences"]:
+                print(f"  {c['level_emoji']} {c['token_symbol'] or c['token_address'][:12]}: "
+                      f"score={c['weighted_score']:.1f} wallets={c['wallet_count']} "
+                      f"level={c['convergence_level']}")
+        else:
+            print("\nNo smart money convergences detected")
 
     else:
         # Assume it's a token address

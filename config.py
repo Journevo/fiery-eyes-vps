@@ -21,6 +21,7 @@ REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID", "")
 REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET", "")
 REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT", "fiery-eyes/1.0")
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+YOUTUBE_COOKIES_FILE = os.getenv("YOUTUBE_COOKIES_FILE", str(Path(__file__).parent / "cookies.txt"))
 APIFY_API_KEY = os.getenv("APIFY_API_KEY", "")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres@localhost:5432/fiery_eyes")
 

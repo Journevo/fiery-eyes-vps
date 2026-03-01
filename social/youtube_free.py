@@ -24,14 +24,14 @@ from xml.etree import ElementTree
 import requests
 from youtube_transcript_api import YouTubeTranscriptApi
 
-from config import ANTHROPIC_API_KEY, get_logger
+from config import ANTHROPIC_API_KEY, YOUTUBE_COOKIES_FILE, get_logger
 from db.connection import execute, execute_one
 from telegram_bot.alerts import _send, send_message
 
 log = get_logger("social.youtube")
 
 CHANNELS_FILE = Path(__file__).parent / "youtube_channels.json"
-COOKIES_FILE = Path(os.environ.get("YOUTUBE_COOKIES_FILE", str(Path(__file__).parents[1] / "cookies.txt")))
+COOKIES_FILE = Path(YOUTUBE_COOKIES_FILE)
 RSS_URL = "https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
 YT_DLP = Path(__file__).parents[1] / "venv" / "bin" / "yt-dlp"
 
@@ -849,6 +849,11 @@ def process_video(channel_name: str, video: dict) -> dict | None:
 def run_youtube_scan():
     """Main entry: scan all channels for new videos, process each."""
     log.info("=== YouTube Channel Scan ===")
+
+    if COOKIES_FILE.exists():
+        log.info("YouTube cookies loaded from %s", COOKIES_FILE)
+    else:
+        log.warning("No cookies file at %s — transcripts may fail on datacenter IPs (RSS-only fallback)", COOKIES_FILE)
 
     # Use tier-based config, resolve any missing channel IDs
     from youtube.channels import get_active_channels, ensure_channel_ids

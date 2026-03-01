@@ -44,6 +44,8 @@ EXPECTED_TASKS = {
     "watch_recheck": SCAN_INTERVAL_MINUTES,
     "smart_money_poll_high": 30,   # 30-min HIGH tier poll
     "smart_money_poll_medium": 120, # 2-hr MEDIUM tier poll
+    "gmgn_scrape": 10080,          # weekly (Sunday 00:00 UTC)
+    "smart_money_radar": 60,       # hourly convergence check
 }
 
 
@@ -273,6 +275,34 @@ def _smart_money_poll_medium():
     record_run_completion("smart_money_poll_medium")
 
 
+def _gmgn_weekly_scrape():
+    """Weekly Sunday 00:00: scrape GMGN smart money leaderboard."""
+    log.info("=== GMGN Weekly Wallet Scrape ===")
+    try:
+        from wallets.gmgn_scraper import run_gmgn_scrape
+        result = run_gmgn_scrape()
+        log.info("GMGN scrape done: %d passed filter, +%d new, -%d removed",
+                 result.get("passed_filter", 0),
+                 result.get("new_wallets", 0),
+                 result.get("removed", 0))
+    except Exception as e:
+        log.error("GMGN weekly scrape failed: %s", e)
+    record_run_completion("gmgn_scrape")
+
+
+def _smart_money_radar():
+    """Hourly: check for cross-source smart money convergence."""
+    try:
+        from wallets.convergence_detector import run_convergence_check
+        result = run_convergence_check()
+        convergences = result.get("convergences", [])
+        if convergences:
+            log.info("Smart money radar: %d convergences detected", len(convergences))
+    except Exception as e:
+        log.error("Smart money radar failed: %s", e)
+    record_run_completion("smart_money_radar")
+
+
 def _silence_check():
     """Periodic: check for missed scheduled runs."""
     try:
@@ -316,6 +346,8 @@ def run_scanner():
     schedule.every().day.at("06:30").do(_lifecycle_check)
     schedule.every(SCAN_INTERVAL_MINUTES).minutes.do(_smart_money_poll_high)
     schedule.every(2).hours.do(_smart_money_poll_medium)
+    schedule.every().sunday.at("00:00").do(_gmgn_weekly_scrape)
+    schedule.every(1).hours.do(_smart_money_radar)
     schedule.every(5).minutes.do(_silence_check)
 
     while True:
