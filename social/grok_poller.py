@@ -28,6 +28,11 @@ log = get_logger("social.grok_poller")
 GROK_RESPONSES_URL = "https://api.x.ai/v1/responses"
 GROK_MODEL = "grok-4-1-fast"
 
+
+class GrokRateLimited(Exception):
+    """Raised when Grok API returns 429 — signals callers to stop polling."""
+    pass
+
 # Original 4 specialized accounts (backward compat)
 SMART_MONEY_ACCOUNTS = [
     {"handle": "StalkHQ",       "interval_min": 30, "parser": "stalk"},
@@ -139,9 +144,14 @@ def _grok_fetch_tweets(handle: str, interval_min: int = 30,
         record_api_call("grok", False)
         return []
     except requests.RequestException as e:
+        if '429' in str(e):
+            log.warning("Grok rate-limited for @%s — skipping rest of cycle", handle)
+            raise GrokRateLimited(str(e))
         log.error("Grok API request error for @%s: %s", handle, e)
         record_api_call("grok", False)
         return []
+    except GrokRateLimited:
+        raise
     except Exception as e:
         log.error("Grok API error for @%s: %s", handle, e)
         record_api_call("grok", False)
@@ -286,9 +296,14 @@ def _grok_fetch_tweets_batch(handles: list[str], interval_min: int = 30,
         record_api_call("grok", False)
         return []
     except requests.RequestException as e:
+        if '429' in str(e):
+            log.warning("Grok batch rate-limited — skipping rest of cycle")
+            raise GrokRateLimited(str(e))
         log.error("Grok batch API request error: %s", e)
         record_api_call("grok", False)
         return []
+    except GrokRateLimited:
+        raise
     except Exception as e:
         log.error("Grok batch API error: %s", e)
         record_api_call("grok", False)
@@ -463,6 +478,10 @@ def _poll_specialized_accounts() -> dict:
             count = poll_account(config)
             per_account[handle] = count
             total += count
+        except GrokRateLimited:
+            log.warning("Grok rate-limited — aborting specialized poll cycle")
+            return {"total_signals": total, "per_account": per_account,
+                    "errors": errors, "rate_limited": True}
         except Exception as e:
             log.error("Poll failed for @%s: %s", handle, e)
             errors.append(handle)
@@ -524,6 +543,9 @@ def _poll_batch_tier(accounts: list[str], batch_size: int) -> dict:
                              parsed.get("token_symbol") or "?",
                              parsed.get("signal_strength"))
 
+        except GrokRateLimited:
+            log.warning("Grok rate-limited — aborting batch poll cycle")
+            break
         except Exception as e:
             log.error("Batch poll failed (%s): %s", batch_id, e)
             errors.extend(batch)
@@ -551,18 +573,21 @@ def run_smart_money_poll_high() -> dict:
     # 1. Poll specialized accounts individually
     result = _poll_specialized_accounts()
 
-    # 2. Poll HIGH generic accounts in batches
-    config = _load_monitor_config()
-    high_accounts = config.get("high", [])
+    # 2. Poll HIGH generic accounts in batches (skip if already rate-limited)
+    if result.get("rate_limited"):
+        log.warning("Skipping HIGH generic poll — Grok rate-limited")
+    else:
+        config = _load_monitor_config()
+        high_accounts = config.get("high", [])
 
-    if high_accounts:
-        batch_result = _poll_batch_tier(high_accounts, batch_size=10)
-        result["total_signals"] += batch_result["total_signals"]
-        result["per_account"].update(batch_result["per_account"])
-        result["errors"].extend(batch_result["errors"])
+        if high_accounts:
+            batch_result = _poll_batch_tier(high_accounts, batch_size=10)
+            result["total_signals"] += batch_result["total_signals"]
+            result["per_account"].update(batch_result["per_account"])
+            result["errors"].extend(batch_result["errors"])
 
-    log.info("Smart money HIGH tier poll complete: %d new signals (specialized + %d HIGH generic)",
-             result["total_signals"], len(high_accounts))
+    log.info("Smart money HIGH tier poll complete: %d new signals",
+             result["total_signals"])
 
     return result
 
