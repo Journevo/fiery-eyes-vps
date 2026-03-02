@@ -152,12 +152,14 @@ def execute_entry(token_address: str, entry_type: str,
                f"🪙 ${symbol or token_address[:12]}\n"
                f"📊 Type: {entry_type}\n"
                f"📐 Phase 1: {phase1_pct}%\n"
-               f"💰 Price: ${price:.8f}" if price < 1 else
+               f"💰 Price: ${price:.8f}\n"
+               f"📋 CA: <code>{token_address}</code>" if price < 1 else
                f"⚡ <b>ENTRY [{mode}]</b>\n"
                f"🪙 ${symbol or token_address[:12]}\n"
                f"📊 Type: {entry_type}\n"
                f"📐 Phase 1: {phase1_pct}%\n"
-               f"💰 Price: ${price:.4f}")
+               f"💰 Price: ${price:.4f}\n"
+               f"📋 CA: <code>{token_address}</code>")
         if health_score is not None:
             msg += f"\n🏥 Health: {health_score:.0f}/100"
         route_alert(2, msg)

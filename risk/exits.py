@@ -514,7 +514,8 @@ def _send_exit_alerts(results: list[dict]):
     for result in results:
         lines = [
             "⚠️ <b>EXIT TRIGGER ALERT</b> ⚠️",
-            f"Token: <code>{result.get('symbol', '???')}</code> ({result['mint'][:12]}...)",
+            f"Token: <code>{result.get('symbol', '???')}</code>",
+            f"📋 CA: <code>{result['mint']}</code>",
             f"Category: {result['category']}",
             "",
         ]

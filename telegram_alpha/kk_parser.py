@@ -172,6 +172,7 @@ def on_kk_call(token_address: str, message_text: str = ""):
             flags_str = ', '.join(safety_flags) if safety_flags else 'unknown'
             msg = (f"🟡 <b>KK CALL — FLAGS</b>\n"
                    f"🪙 ${symbol}\n"
+                   f"📋 CA: <code>{token_address}</code>\n"
                    f"⚠️ {flags_str}\n"
                    f"Reply 'buy' to override")
             route_alert(2, msg)

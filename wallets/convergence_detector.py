@@ -300,6 +300,7 @@ def _send_convergence_alert(conv: dict):
         f"{conv['level_emoji']} <b>SMART MONEY {conv['convergence_level']}</b>\n"
         f"\n"
         f"Token: {symbol_str}\n"
+        f"📋 CA: <code>{conv['token_address']}</code>\n"
         f"Wallets: {conv['wallet_count']} independent buys in {CONVERGENCE_WINDOW_HOURS}h\n"
         f"Score: {conv['weighted_score']:.1f} ({sources_str})\n"
         f"\n"

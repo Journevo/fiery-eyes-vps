@@ -375,15 +375,19 @@ def _route_signal_alert(handle: str, parsed: dict, tweet_text: str):
             if amount_str:
                 extra_info += f" ({amount_str})"
 
+            ca = parsed.get("token_address") or ""
+            ca_line = f"\n📋 CA: <code>{ca}</code>" if ca else ""
             msg = (f"📡 <b>X SMART MONEY</b>\n"
                    f"@{handle} — {parsed_type}\n"
                    f"🪙 ${symbol}{extra_info}\n"
-                   f"Strength: {strength}")
+                   f"Strength: {strength}{ca_line}")
             route_alert(2, msg)
 
         elif strength == "medium":
             amount_str = f" ${parsed['amount_usd']:,.0f}" if parsed.get("amount_usd") else ""
-            msg = f"@{handle}: {parsed_type} ${symbol}{amount_str} [{strength}]"
+            ca = parsed.get("token_address") or ""
+            ca_str = f" | CA: {ca}" if ca else ""
+            msg = f"@{handle}: {parsed_type} ${symbol}{amount_str} [{strength}]{ca_str}"
             route_alert(3, msg)
 
         else:

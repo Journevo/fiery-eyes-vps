@@ -145,6 +145,7 @@ def _format_pass_alert(mint: str, info: dict, checks: dict) -> list[str]:
         lines.append(f"  {icon} {label}: {detail}")
 
     lines.append("")
+    lines.append(f"📋 CA: <code>{mint}</code>")
     lines.append(f"🔗 {_token_links(mint)}")
 
     return lines
@@ -173,6 +174,7 @@ def _format_watch_alert(mint: str, info: dict, checks: dict,
         lines.append(f"Failing: {', '.join(failures)}")
 
     lines.append("")
+    lines.append(f"📋 CA: <code>{mint}</code>")
     lines.append(f"🔗 {_token_links(mint)}")
 
     return lines
@@ -240,6 +242,7 @@ def send_scored_alert(gate_result: dict, score_result: dict):
         lines.append(f"⚠️ Triggers: {', '.join(triggers)}")
 
     lines.append("")
+    lines.append(f"📋 CA: <code>{mint}</code>")
     lines.append(f"🔗 {_token_links(mint)}")
 
     return _send("\n".join(lines))

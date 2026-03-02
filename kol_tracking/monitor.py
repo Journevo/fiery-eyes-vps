@@ -300,6 +300,7 @@ def _trigger_entry(token_address: str, token_symbol: str | None, kol_name: str,
                f"👤 {kol_name}\n"
                f"🪙 {token_symbol or token_address[:12]}\n"
                f"💰 ${amount_usd:,.0f}\n"
+               f"📋 CA: <code>{token_address}</code>\n"
                f"⚡ Auto-entry triggered")
         route_alert(1, msg)
     except Exception as e:
@@ -350,7 +351,8 @@ def _check_exit_signal(wallet_id: int, name: str, token_address: str,
                 from telegram_bot.severity import route_alert
                 msg = (f"🔴 <b>KOL EXIT SIGNAL</b>\n"
                        f"👤 {name} sold {pct_sold:.0f}% of "
-                       f"{token_symbol or token_address[:12]}")
+                       f"{token_symbol or token_address[:12]}\n"
+                       f"📋 CA: <code>{token_address}</code>")
                 route_alert(1, msg)
             except Exception:
                 pass
