@@ -10,6 +10,7 @@ Runs continuously:
 - Every 4h:  Holdings+macro snapshot → Huoyan pulse → regime update → established scoring
 - Daily 03:00: Moonbag reaper
 - Daily 06:00: Chain adoption metrics (DeFiLlama)
+- Sunday 08:00: Weekly portfolio review
 
 KK Telegram listener runs in separate service (fiery-eyes-kk).
 """
@@ -50,6 +51,7 @@ _last_run = {
     'holdings_macro': _now,        # first fire at +14400s (aligned with huoyan)
     'chain_metrics': _now,         # first fire at daily 06:00 UTC
     'moonbag_reaper': 0,
+    'weekly_review': 0,
 }
 
 # Mutex to prevent KOL polling and health scoring from hitting Helius concurrently
@@ -227,6 +229,15 @@ def run_chain_metrics():
         log.error("Chain metrics collection failed: %s", e)
 
 
+def run_weekly_review():
+    """Generate and send weekly portfolio review (Sunday 08:00 UTC)."""
+    try:
+        from reports.weekly_review import generate_weekly_review
+        generate_weekly_review()
+    except Exception as e:
+        log.error("Weekly review failed: %s", e)
+
+
 def main_loop():
     """Main daemon loop."""
     log.info("Fiery Eyes v2 main loop starting")
@@ -320,6 +331,12 @@ def main_loop():
                 if _should_run('moonbag_reaper', 82800):  # ~23h cooldown
                     threading.Thread(target=run_moonbag_reaper, daemon=True).start()
                     _mark_run('moonbag_reaper')
+
+            # Weekly portfolio review — Sunday 08:00 UTC
+            if now.weekday() == 6 and now.hour == 8 and now.minute < 2:
+                if _should_run('weekly_review', 604800):  # ~7d cooldown
+                    threading.Thread(target=run_weekly_review, daemon=True).start()
+                    _mark_run('weekly_review')
 
             # Record monitoring heartbeat
             try:

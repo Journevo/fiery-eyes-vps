@@ -202,7 +202,7 @@ def collect_macro_snapshot():
              btc_price, btc_dominance, sol_btc_ratio,
              stablecoin_total / 1e9 if stablecoin_total else 0, regime_signal)
 
-    return {
+    result = {
         "btc_price": btc_price,
         "btc_dominance": btc_dominance,
         "sol_btc_ratio": sol_btc_ratio,
@@ -210,6 +210,14 @@ def collect_macro_snapshot():
         "stablecoin_total": stablecoin_total,
         "regime_signal": regime_signal,
     }
+
+    # Check for macro alert conditions
+    try:
+        _check_macro_alerts(result)
+    except Exception as e:
+        log.error("Macro alert check failed: %s", e)
+
+    return result
 
 
 def get_macro_summary() -> dict:
@@ -272,3 +280,178 @@ def get_macro_summary() -> dict:
         "sol_btc_trend": sol_btc_trend,
         "dom_trend": dom_trend,
     }
+
+
+# ---------------------------------------------------------------------------
+# Macro shift alerts — max 2/day to H-Fire, 24h dedup
+# ---------------------------------------------------------------------------
+
+_alert_table_ensured = False
+
+
+def _ensure_alert_table():
+    """Create macro_alert_log table if it doesn't exist."""
+    global _alert_table_ensured
+    if _alert_table_ensured:
+        return
+    execute(
+        """CREATE TABLE IF NOT EXISTS macro_alert_log (
+            id          SERIAL PRIMARY KEY,
+            alert_type  VARCHAR(50) NOT NULL,
+            message     TEXT,
+            timestamp   TIMESTAMP DEFAULT NOW()
+        )""",
+    )
+    _alert_table_ensured = True
+
+
+def _alerts_sent_today() -> int:
+    """Count macro alerts sent in the last 24 hours."""
+    row = execute_one(
+        "SELECT COUNT(*) FROM macro_alert_log WHERE timestamp > NOW() - INTERVAL '24 hours'",
+    )
+    return row[0] if row else 0
+
+
+def _alert_already_sent(alert_type: str) -> bool:
+    """Check if this alert type was already sent in the last 24h."""
+    row = execute_one(
+        "SELECT id FROM macro_alert_log WHERE alert_type = %s AND timestamp > NOW() - INTERVAL '24 hours'",
+        (alert_type,),
+    )
+    return bool(row)
+
+
+def _send_macro_alert(alert_type: str, tier: int, message: str):
+    """Send a macro alert to H-Fire and log it."""
+    from telegram_bot.severity import route_alert
+    route_alert(tier, message)
+    execute(
+        "INSERT INTO macro_alert_log (alert_type, message) VALUES (%s, %s)",
+        (alert_type, message),
+    )
+    log.info("Macro alert sent: %s", alert_type)
+
+
+def _get_sol_btc_7d_change() -> float | None:
+    """Calculate SOL/BTC ratio % change over ~7 days from macro_regime_v2."""
+    current = execute_one(
+        "SELECT sol_btc_ratio FROM macro_regime_v2 ORDER BY timestamp DESC LIMIT 1",
+    )
+    prev = execute_one(
+        """SELECT sol_btc_ratio FROM macro_regime_v2
+           WHERE timestamp < NOW() - INTERVAL '6 days'
+           ORDER BY timestamp DESC LIMIT 1""",
+    )
+    if current and prev and current[0] and prev[0]:
+        return (float(current[0]) - float(prev[0])) / float(prev[0]) * 100
+    return None
+
+
+def _get_previous_regime() -> str | None:
+    """Get the regime signal from the snapshot before the current one."""
+    row = execute_one(
+        """SELECT regime_signal FROM macro_regime_v2
+           ORDER BY timestamp DESC LIMIT 1 OFFSET 1""",
+    )
+    return row[0] if row else None
+
+
+def _check_sol_dex_share_loss() -> str | None:
+    """Check if Solana DEX volume dropped below ETH for 3 consecutive days."""
+    try:
+        rows = execute(
+            """SELECT date,
+                      SUM(CASE WHEN chain = 'Solana' THEN value ELSE 0 END) as sol_vol,
+                      SUM(CASE WHEN chain = 'Ethereum' THEN value ELSE 0 END) as eth_vol
+               FROM chain_metrics
+               WHERE metric_name = 'dex_volume'
+                 AND chain IN ('Solana', 'Ethereum')
+                 AND date >= CURRENT_DATE - INTERVAL '3 days'
+               GROUP BY date
+               ORDER BY date DESC
+               LIMIT 3""",
+            fetch=True,
+        )
+        if not rows or len(rows) < 3:
+            return None
+        all_below = all(r[1] < r[2] for r in rows if r[1] and r[2])
+        if all_below:
+            sol_vol = rows[0][1]
+            eth_vol = rows[0][2]
+            return (
+                f"⚠️ <b>SOLANA DEX SHARE LOSS</b>\n"
+                f"SOL DEX vol below ETH for 3 consecutive days\n"
+                f"SOL: ${sol_vol / 1e9:.1f}B vs ETH: ${eth_vol / 1e9:.1f}B"
+            )
+    except Exception as e:
+        log.debug("DEX share check failed: %s", e)
+    return None
+
+
+def _check_macro_alerts(snapshot: dict):
+    """Check macro conditions and fire alerts to H-Fire. Max 2/day, 24h dedup."""
+    _ensure_alert_table()
+
+    sent_today = _alerts_sent_today()
+    if sent_today >= 2:
+        return
+
+    remaining = 2 - sent_today
+    alerts = []
+
+    # 1. SOL/BTC ratio weakening (7d)
+    sol_btc_7d = _get_sol_btc_7d_change()
+    if sol_btc_7d is not None:
+        ratio = snapshot.get("sol_btc_ratio", 0)
+        if sol_btc_7d < -10:
+            alerts.append((
+                "sol_btc_critical", 1,
+                f"🔴 <b>SOL/BTC CRITICAL</b>\n"
+                f"SOL/BTC: {ratio:.6f} ({sol_btc_7d:+.1f}% in 7d)\n"
+                f"SOL significantly underperforming BTC",
+            ))
+        elif sol_btc_7d < -5:
+            alerts.append((
+                "sol_btc_weak", 2,
+                f"🟡 <b>SOL/BTC WEAKENING</b>\n"
+                f"SOL/BTC: {ratio:.6f} ({sol_btc_7d:+.1f}% in 7d)\n"
+                f"Monitor for further deterioration",
+            ))
+
+    # 2. BTC dominance above 60%
+    btc_dom = snapshot.get("btc_dominance", 0)
+    if btc_dom > 60:
+        alerts.append((
+            "btc_dom_high", 2,
+            f"⚠️ <b>BTC DOMINANCE HIGH</b>\n"
+            f"BTC dominance: {btc_dom:.1f}%\n"
+            f"Alt rotation unlikely — capital concentrating in BTC",
+        ))
+
+    # 3. Regime change
+    prev_regime = _get_previous_regime()
+    current_regime = snapshot.get("regime_signal", "NEUTRAL")
+    if prev_regime and prev_regime != current_regime:
+        emoji = {"RISK_ON": "🟢", "NEUTRAL": "🟡", "RISK_OFF": "🔴"}.get(current_regime, "⚪")
+        alerts.append((
+            "regime_change", 2,
+            f"{emoji} <b>REGIME SHIFT</b>\n"
+            f"{prev_regime} → {current_regime}\n"
+            f"BTC ${snapshot.get('btc_price', 0):,.0f} | "
+            f"Dom {btc_dom:.1f}% | SOL/BTC {snapshot.get('sol_btc_ratio', 0):.6f}",
+        ))
+
+    # 4. Solana DEX share loss (3 consecutive days below ETH)
+    dex_msg = _check_sol_dex_share_loss()
+    if dex_msg:
+        alerts.append(("sol_dex_share_loss", 2, dex_msg))
+
+    # Send alerts, respecting daily cap and dedup
+    for alert_type, tier, msg in alerts:
+        if remaining <= 0:
+            break
+        if _alert_already_sent(alert_type):
+            continue
+        _send_macro_alert(alert_type, tier, msg)
+        remaining -= 1
