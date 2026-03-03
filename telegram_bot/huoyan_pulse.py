@@ -262,22 +262,26 @@ def _smart_money_radar_section() -> list[str]:
     try:
         from wallets.convergence_detector import get_radar_summary
         radar = get_radar_summary()
-        if radar["active"] > 0:
-            for conv in radar["convergences"][:3]:
+        # Only show convergences at EMERGING (8+) or STRONG (12+)
+        strong_signals = [
+            c for c in radar.get("convergences", [])
+            if c["convergence_level"] in ("EMERGING", "STRONG CONVERGENCE")
+        ]
+        if strong_signals:
+            for conv in strong_signals[:3]:
                 symbol = f"${conv['token_symbol']}" if conv.get("token_symbol") else conv["token_address"][:12]
                 level = conv["convergence_level"]
                 level_map = {
                     "STRONG CONVERGENCE": "🔴",
                     "EMERGING": "🟡",
-                    "WATCHING": "👀",
                 }
-                icon = level_map.get(level, "👀")
+                icon = level_map.get(level, "🟡")
                 lines.append(
                     f"  {icon} {symbol}: {conv['wallet_count']} wallets, "
                     f"score {conv['weighted_score']:.1f} [{level}]"
                 )
         else:
-            lines.append("  ⚪ No convergences active")
+            lines.append("  🔇 Quiet — no strong meme signals")
     except Exception as e:
         log.debug("Smart money radar section: %s", e)
         lines.append("  Radar data unavailable")

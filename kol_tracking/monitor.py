@@ -293,18 +293,9 @@ def _trigger_entry(token_address: str, token_symbol: str | None, kol_name: str,
     except Exception as e:
         log.error("Failed to trigger entry pipeline: %s", e)
 
-    # Send alert
-    try:
-        from telegram_bot.severity import route_alert
-        msg = (f"🔴 <b>TIER 1 KOL BUY</b>\n"
-               f"👤 {kol_name}\n"
-               f"🪙 {token_symbol or token_address[:12]}\n"
-               f"💰 ${amount_usd:,.0f}\n"
-               f"📋 CA: <code>{token_address}</code>\n"
-               f"⚡ Auto-entry triggered")
-        route_alert(1, msg)
-    except Exception as e:
-        log.error("Failed to send KOL alert: %s", e)
+    # Individual KOL buy alerts suppressed — convergence detector handles alerting
+    log.info("TIER 1 KOL BUY: %s %s ($%.0f) — alert suppressed, convergence-only",
+             kol_name, token_symbol or token_address[:12], amount_usd)
 
 
 def _check_exit_signal(wallet_id: int, name: str, token_address: str,
@@ -344,18 +335,10 @@ def _check_exit_signal(wallet_id: int, name: str, token_address: str,
 
             _exit_alert_sent[dedup_key] = now
 
-            log.warning("KOL EXIT SIGNAL: %s sold %.0f%% of %s (bought=%.2f sold=%.2f)",
+            # Individual exit alerts suppressed — logged to DB only
+            log.warning("KOL EXIT SIGNAL: %s sold %.0f%% of %s (bought=%.2f sold=%.2f) — alert suppressed",
                         name, pct_sold, token_symbol or token_address[:12],
                         total_bought, total_sold)
-            try:
-                from telegram_bot.severity import route_alert
-                msg = (f"🔴 <b>KOL EXIT SIGNAL</b>\n"
-                       f"👤 {name} sold {pct_sold:.0f}% of "
-                       f"{token_symbol or token_address[:12]}\n"
-                       f"📋 CA: <code>{token_address}</code>")
-                route_alert(1, msg)
-            except Exception:
-                pass
     except Exception as e:
         log.debug("Exit signal check failed: %s", e)
 

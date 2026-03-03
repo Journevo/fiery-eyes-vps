@@ -9,11 +9,10 @@ Weighted scoring:
   - Tier C (GMGN Tier C):             0.5x
 
 Thresholds (weighted score):
-  - 3-5:  WATCHING
-  - 5-8:  EMERGING
-  - 8+:   STRONG CONVERGENCE
+  - 5-8:   WATCHING (DB only, no Telegram alert)
+  - 8-12:  EMERGING → H-Fire (Tier 2)
+  - 12+:   STRONG CONVERGENCE → H-Fire (Tier 2)
 
-Convergence alerts → H-Fire channel (Tier 2).
 Smart Money Radar section added to Huoyan pulse.
 
 Run: python main.py smart-radar
@@ -43,9 +42,9 @@ TIER_WEIGHTS = {
 }
 
 # Convergence level thresholds (on weighted score)
-LEVEL_WATCHING = 3.0
-LEVEL_EMERGING = 5.0
-LEVEL_STRONG = 8.0
+LEVEL_WATCHING = 5.0
+LEVEL_EMERGING = 8.0
+LEVEL_STRONG = 12.0
 
 
 def _get_recent_kol_buys(hours: int = 6) -> list[dict]:
@@ -307,11 +306,13 @@ def _send_convergence_alert(conv: dict):
         + "\n".join(wallet_lines)
     )
 
-    # EMERGING and STRONG go to H-Fire (Tier 2), WATCHING gets batched (Tier 3)
+    # Only EMERGING and STRONG get Telegram alerts (H-Fire Tier 2)
+    # WATCHING is DB-only — no Telegram noise
     if conv["convergence_level"] == "WATCHING":
-        route_alert(3, alert)
-    else:
-        route_alert(2, alert)
+        log.info("WATCHING convergence for %s (score=%.1f) — DB only, no alert",
+                 symbol_str, conv["weighted_score"])
+        return
+    route_alert(2, alert)
 
 
 def _expire_old_convergences():
