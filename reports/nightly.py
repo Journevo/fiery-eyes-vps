@@ -34,6 +34,12 @@ def generate_nightly_report() -> str:
     # 1. Regime status
     lines.extend(_regime_section())
 
+    # 1b. Chain adoption scorecard
+    lines.extend(_chain_adoption_section())
+
+    # 1c. Holdings health
+    lines.extend(_holdings_section())
+
     # 2. THREE SHORTLISTS
     lines.extend(_momentum_shortlist())
     lines.extend(_adoption_shortlist())
@@ -463,6 +469,64 @@ def _portfolio_section() -> list[str]:
         log.error("Portfolio section error: %s", e)
         lines.append("  ⚠️ Portfolio data unavailable")
 
+    lines.append("")
+    return lines
+
+
+def _chain_adoption_section() -> list[str]:
+    """Chain adoption scorecard from DeFiLlama data."""
+    lines = ["<b>🔗 Chain Adoption Scorecard</b>"]
+    try:
+        from chain_metrics.adoption import get_chain_scorecard
+        sc = get_chain_scorecard()
+        chains = sc.get("chains", {})
+        if chains:
+            for chain in ("Solana", "Ethereum", "Base", "Sui", "Arbitrum"):
+                c = chains.get(chain, {})
+                if not c:
+                    continue
+                tvl = c.get("tvl", 0)
+                tvl_pct = c.get("tvl_7d_pct", 0)
+                dex = c.get("dex_volume", 0)
+                dex_pct = c.get("dex_volume_7d_pct", 0)
+                tvl_share = c.get("tvl_share", 0)
+                lines.append(
+                    f"  {chain}: TVL ${tvl / 1e9:.1f}B ({tvl_pct:+.1f}%, {tvl_share:.1f}%) | "
+                    f"DEX ${dex / 1e9:.1f}B ({dex_pct:+.1f}%)"
+                )
+            trend = sc.get("solana_trend", "unknown")
+            lines.append(f"  Solana trend: <b>{trend}</b>")
+        else:
+            lines.append("  No chain data available — run chain-metrics first")
+    except Exception as e:
+        log.debug("Chain adoption section: %s", e)
+        lines.append("  Chain data unavailable")
+    lines.append("")
+    return lines
+
+
+def _holdings_section() -> list[str]:
+    """Holdings health summary for SOL/JUP/Pump.fun."""
+    lines = ["<b>💰 Holdings Health</b>"]
+    try:
+        from chain_metrics.holdings import get_holdings_summary
+        holdings = get_holdings_summary()
+        if holdings:
+            for token, h in holdings.items():
+                price = h.get("price", 0)
+                change = h.get("change_7d", 0)
+                extras = []
+                if h.get("sol_btc_ratio"):
+                    extras.append(f"SOL/BTC: {h['sol_btc_ratio']:.6f}")
+                if h.get("volume_24h"):
+                    extras.append(f"Vol: ${h['volume_24h']:,.0f}")
+                extra_str = f" | {', '.join(extras)}" if extras else ""
+                lines.append(f"  {token}: ${price:.4f} (7d: {change:+.1f}%){extra_str}")
+        else:
+            lines.append("  No holdings data — run holdings first")
+    except Exception as e:
+        log.debug("Holdings section: %s", e)
+        lines.append("  Holdings data unavailable")
     lines.append("")
     return lines
 

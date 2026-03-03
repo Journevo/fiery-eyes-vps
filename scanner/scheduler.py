@@ -46,6 +46,9 @@ EXPECTED_TASKS = {
     "smart_money_poll_medium": 120, # 2-hr MEDIUM tier poll
     "gmgn_scrape": 10080,          # weekly (Sunday 00:00 UTC)
     "smart_money_radar": 60,       # hourly convergence check
+    "chain_metrics_daily": 1440,   # daily chain adoption data
+    "huoyan_pulse": 240,           # 4-hourly pulse
+    "holdings_macro_snapshot": 240, # 4-hourly holdings + macro
 }
 
 
@@ -303,6 +306,44 @@ def _smart_money_radar():
     record_run_completion("smart_money_radar")
 
 
+def _chain_metrics_daily():
+    """Daily 06:00: collect chain adoption metrics from DeFiLlama."""
+    log.info("=== Collecting chain adoption metrics ===")
+    try:
+        from chain_metrics.adoption import collect_chain_metrics
+        result = collect_chain_metrics()
+        log.info("Chain metrics: %d rows stored", result.get("rows_stored", 0))
+    except Exception as e:
+        log.error("Chain metrics collection failed: %s", e)
+    record_run_completion("chain_metrics_daily")
+
+
+def _huoyan_pulse():
+    """4-hourly: generate and send Huoyan intelligence pulse."""
+    try:
+        from telegram_bot.huoyan_pulse import generate_pulse
+        generate_pulse()
+    except Exception as e:
+        log.error("Huoyan pulse failed: %s", e)
+    record_run_completion("huoyan_pulse")
+
+
+def _holdings_macro_snapshot():
+    """4-hourly: collect holdings health + macro regime snapshot."""
+    log.info("=== Holdings + macro snapshot ===")
+    try:
+        from chain_metrics.holdings import collect_holdings_health
+        collect_holdings_health()
+    except Exception as e:
+        log.error("Holdings health collection failed: %s", e)
+    try:
+        from chain_metrics.macro import collect_macro_snapshot
+        collect_macro_snapshot()
+    except Exception as e:
+        log.error("Macro snapshot collection failed: %s", e)
+    record_run_completion("holdings_macro_snapshot")
+
+
 def _silence_check():
     """Periodic: check for missed scheduled runs."""
     try:
@@ -348,6 +389,9 @@ def run_scanner():
     schedule.every(2).hours.do(_smart_money_poll_medium)
     schedule.every().sunday.at("00:00").do(_gmgn_weekly_scrape)
     schedule.every(1).hours.do(_smart_money_radar)
+    schedule.every().day.at("06:00").do(_chain_metrics_daily)
+    schedule.every(4).hours.do(_holdings_macro_snapshot)
+    schedule.every(4).hours.do(_huoyan_pulse)
     schedule.every(5).minutes.do(_silence_check)
 
     while True:

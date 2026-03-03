@@ -1,7 +1,10 @@
 """Huoyan Jinjing (火眼金睛) — 4-hourly intelligence pulse.
 
-Runs at 06:00, 10:00, 14:00, 18:00, 22:00, 02:00 UTC.
-Max 30 lines per pulse. If nothing new -> "X quiet" (confirms monitoring active).
+Runs at 02:00, 06:00, 10:00, 14:00, 18:00, 22:00 UTC.
+Max 50 lines per pulse. If nothing new -> "X quiet" (confirms monitoring active).
+
+Section order: Macro → Chain Scorecard → Holdings → Positions →
+Intelligence (YouTube + X) → Meme Radar → Scanner
 
 06:00 adds: Today's watchlist + catalysts
 22:00 adds: Portfolio summary
@@ -29,22 +32,23 @@ def generate_pulse(hour: int | None = None) -> str:
         "",
     ]
 
-    # Market section
-    lines.extend(_market_section())
+    # 1. Macro Regime (enhanced)
+    lines.extend(_macro_regime_section())
 
-    # Open positions health dashboard
+    # 2. Chain Scorecard
+    lines.extend(_chain_scorecard_section())
+
+    # 3. Holdings Health
+    lines.extend(_holdings_health_section())
+
+    # 4. Open positions health dashboard
     lines.extend(_positions_section())
 
-    # KOL Activity
-    lines.extend(_kol_activity_section())
-
-    # YouTube Intel
+    # 5. Intelligence: YouTube + X
     lines.extend(_youtube_section())
-
-    # X Smart Money Intelligence
     lines.extend(_x_intelligence_section())
 
-    # Smart Money Radar (convergence detection)
+    # 6. Meme Radar (strong convergence only)
     lines.extend(_smart_money_radar_section())
 
     # Batched Tier 3 alerts
@@ -52,14 +56,13 @@ def generate_pulse(hour: int | None = None) -> str:
     if batch:
         lines.append("<b>📋 Alerts</b>")
         for item in batch[:5]:
-            # Strip HTML for condensed view
             clean = item.replace("<b>", "").replace("</b>", "")
             lines.append(f"  • {clean[:80]}")
         if len(batch) > 5:
             lines.append(f"  ... +{len(batch) - 5} more")
         lines.append("")
 
-    # Scanner summary
+    # 7. Scanner summary
     lines.extend(_scanner_section())
 
     # 06:00 special: watchlist + catalysts
@@ -70,9 +73,9 @@ def generate_pulse(hour: int | None = None) -> str:
     if hour == 22:
         lines.extend(_portfolio_summary())
 
-    # Cap at 30 lines
-    if len(lines) > 30:
-        lines = lines[:29] + ["... (truncated)"]
+    # Cap at 50 lines (increased for richer format)
+    if len(lines) > 50:
+        lines = lines[:49] + ["... (truncated)"]
 
     # If nothing interesting, confirm we're alive
     if len(lines) <= 3:
@@ -89,36 +92,135 @@ def generate_pulse(hour: int | None = None) -> str:
     return report
 
 
-def _market_section() -> list[str]:
-    """BTC, SOL, regime state."""
-    lines = ["<b>📊 Market</b>"]
+def _macro_regime_section() -> list[str]:
+    """Enhanced macro regime: BTC, dominance, SOL/BTC ratio, funding, stablecoins."""
+    lines = ["<b>📊 Macro Regime</b>"]
     try:
-        from regime.multiplier import get_current_regime
-        regime = get_current_regime()
-        if regime:
-            mult = regime['regime_multiplier']
-            state_map = {
-                (0.8, 999): "🟢 RISK-ON",
-                (0.5, 0.8): "⚪ NEUTRAL",
-                (0.0, 0.5): "🔴 RISK-OFF",
-            }
-            state = "⚪ NEUTRAL"
-            for (lo, hi), s in state_map.items():
-                if lo <= mult < hi:
-                    state = s
-                    break
-            lines.append(f"  Regime: {state} ({mult:.2f})")
+        from chain_metrics.macro import get_macro_summary
+        macro = get_macro_summary()
+        if macro:
+            # Regime signal
+            signal = macro.get("regime_signal", "NEUTRAL")
+            signal_map = {"RISK_ON": "🟢 RISK-ON", "RISK_OFF": "🔴 RISK-OFF", "NEUTRAL": "⚪ NEUTRAL"}
+            lines.append(f"  {signal_map.get(signal, '⚪ NEUTRAL')}")
 
-        # BTC price from regime raw data
-        raw = regime.get('raw_data', {}) if regime else {}
-        btc_price = raw.get('btc_price')
-        if btc_price:
-            lines.append(f"  BTC: ${btc_price:,.0f}")
-        fng = raw.get('fear_greed_value')
-        if fng:
-            lines.append(f"  F&G: {fng}")
+            # BTC price + dominance
+            btc = macro.get("btc_price", 0)
+            dom = macro.get("btc_dominance", 0)
+            dom_trend = macro.get("dom_trend", "flat")
+            trend_arrow = {"rising": "↑", "falling": "↓"}.get(dom_trend, "→")
+            if btc:
+                lines.append(f"  BTC: ${btc:,.0f} | Dom: {dom:.1f}% {trend_arrow}")
+
+            # SOL/BTC ratio
+            ratio = macro.get("sol_btc_ratio", 0)
+            ratio_trend = macro.get("sol_btc_trend", "flat")
+            ratio_arrow = {"up": "↑", "down": "↓"}.get(ratio_trend, "→")
+            if ratio:
+                lines.append(f"  SOL/BTC: {ratio:.6f} {ratio_arrow}")
+
+            # Funding
+            funding = macro.get("funding_avg")
+            if funding is not None:
+                label = "neutral"
+                if funding > 0.03:
+                    label = "greedy"
+                elif funding < -0.03:
+                    label = "fearful"
+                lines.append(f"  Funding: {funding:.4f} ({label})")
+
+            # Stablecoin total
+            stable = macro.get("stablecoin_total", 0)
+            if stable:
+                lines.append(f"  Stablecoins: ${stable / 1e9:.1f}B")
+        else:
+            # Fallback to old regime data
+            from regime.multiplier import get_current_regime
+            regime = get_current_regime()
+            if regime:
+                mult = regime['regime_multiplier']
+                lines.append(f"  Regime: {mult:.2f}")
+                raw = regime.get('raw_data', {})
+                if raw.get('btc_price'):
+                    lines.append(f"  BTC: ${raw['btc_price']:,.0f}")
     except Exception:
-        lines.append("  Regime data unavailable")
+        lines.append("  Macro data unavailable")
+
+    lines.append("")
+    return lines
+
+
+def _chain_scorecard_section() -> list[str]:
+    """Chain adoption scorecard: Solana vs ETH/Base/Sui/Arb."""
+    lines = ["<b>🔗 Chain Scorecard</b>"]
+    try:
+        from chain_metrics.adoption import get_chain_scorecard
+        sc = get_chain_scorecard()
+        chains = sc.get("chains", {})
+        sol = chains.get("Solana", {})
+        if sol:
+            tvl = sol.get("tvl", 0)
+            tvl_pct = sol.get("tvl_7d_pct", 0)
+            dex = sol.get("dex_volume", 0)
+            dex_pct = sol.get("dex_volume_7d_pct", 0)
+            stable = sol.get("stablecoin_mcap", 0)
+            stable_pct = sol.get("stablecoin_mcap_7d_pct", 0)
+            lines.append(
+                f"  SOL: TVL ${tvl / 1e9:.1f}B ({tvl_pct:+.1f}%) | "
+                f"DEX ${dex / 1e9:.1f}B ({dex_pct:+.1f}%)"
+            )
+            if stable:
+                lines.append(f"  Stables: ${stable / 1e9:.1f}B ({stable_pct:+.1f}%)")
+            # Compare vs ETH
+            eth = chains.get("Ethereum", {})
+            if eth:
+                eth_tvl_pct = eth.get("tvl_7d_pct", 0)
+                if tvl_pct > eth_tvl_pct + 2:
+                    lines.append("  vs ETH: gaining share")
+                elif tvl_pct < eth_tvl_pct - 2:
+                    lines.append("  vs ETH: losing share")
+                else:
+                    lines.append("  vs ETH: steady")
+            trend = sc.get("solana_trend", "unknown")
+            trend_icon = {"accelerating": "🚀", "gaining": "📈", "steady": "➡️",
+                          "losing": "📉", "decelerating": "⬇️"}.get(trend, "❓")
+            lines.append(f"  Trend: {trend_icon} {trend}")
+        else:
+            lines.append("  No chain data yet — run chain-metrics")
+    except Exception:
+        lines.append("  Chain data unavailable")
+
+    lines.append("")
+    return lines
+
+
+def _holdings_health_section() -> list[str]:
+    """Holdings health: SOL/JUP/Pump.fun prices and 7d changes."""
+    lines = ["<b>💰 Holdings Health</b>"]
+    try:
+        from chain_metrics.holdings import get_holdings_summary
+        holdings = get_holdings_summary()
+        if holdings:
+            for token in ("SOL", "JUP", "PUMPFUN"):
+                h = holdings.get(token)
+                if not h:
+                    continue
+                price = h.get("price", 0)
+                change = h.get("change_7d", 0)
+                arrow = "📈" if change > 0 else "📉" if change < 0 else "➡️"
+                if token == "SOL":
+                    ratio = h.get("sol_btc_ratio", 0)
+                    ratio_str = f" | SOL/BTC: {ratio:.6f}" if ratio else ""
+                    lines.append(f"  SOL: ${price:.2f} (7d: {change:+.1f}%){ratio_str} {arrow}")
+                elif token == "JUP":
+                    lines.append(f"  JUP: ${price:.4f} (7d: {change:+.1f}%) {arrow}")
+                elif token == "PUMPFUN":
+                    label = h.get("symbol", "PUMP")
+                    lines.append(f"  {label}: ${price:.6f} (7d: {change:+.1f}%) {arrow}")
+        else:
+            lines.append("  No holdings data yet — run holdings")
+    except Exception:
+        lines.append("  Holdings data unavailable")
 
     lines.append("")
     return lines

@@ -36,6 +36,9 @@ Commands:
   python main.py resolve-tokens              Backfill token symbols → addresses
   python main.py seed-from-gmgn              Seed KOL wallets from GMGN fleet
   python main.py smart-radar                 One-time convergence radar check
+  python main.py chain-metrics               Collect chain adoption data (DeFiLlama)
+  python main.py holdings                    Collect holdings health (SOL/JUP/Pump.fun)
+  python main.py macro-snapshot              Collect enhanced macro regime snapshot
 """
 
 import sys
@@ -505,6 +508,53 @@ def main():
                       f"level={c['convergence_level']}")
         else:
             print("\nNo smart money convergences detected")
+
+    elif cmd == "chain-metrics":
+        log.info("Collecting chain adoption metrics")
+        from chain_metrics.adoption import collect_chain_metrics, get_chain_scorecard
+        result = collect_chain_metrics()
+        print(f"\nChain Metrics: {result['rows_stored']} rows stored for {result['date']}")
+        sc = get_chain_scorecard()
+        if sc.get("chains"):
+            print(f"\nChain Scorecard ({sc['date']}):")
+            for chain, data in sc["chains"].items():
+                tvl = data.get("tvl", 0)
+                tvl_pct = data.get("tvl_7d_pct", 0)
+                dex = data.get("dex_volume", 0)
+                dex_pct = data.get("dex_volume_7d_pct", 0)
+                print(f"  {chain}: TVL ${tvl / 1e9:.2f}B ({tvl_pct:+.1f}%) | "
+                      f"DEX ${dex / 1e9:.2f}B ({dex_pct:+.1f}%)")
+            print(f"  Solana trend: {sc.get('solana_trend', 'unknown')}")
+
+    elif cmd == "holdings":
+        log.info("Collecting holdings health")
+        from chain_metrics.holdings import collect_holdings_health, get_holdings_summary
+        result = collect_holdings_health()
+        print(f"\nHoldings Health: {result['tokens_stored']} tokens stored")
+        summary = get_holdings_summary()
+        if summary:
+            print("\nHoldings Summary:")
+            for token, h in summary.items():
+                price = h.get("price", 0)
+                change = h.get("change_7d", 0)
+                extras = []
+                if h.get("sol_btc_ratio"):
+                    extras.append(f"SOL/BTC={h['sol_btc_ratio']:.6f}")
+                extra_str = f" ({', '.join(extras)})" if extras else ""
+                print(f"  {token}: ${price:.4f} (7d: {change:+.1f}%){extra_str}")
+
+    elif cmd == "macro-snapshot":
+        log.info("Collecting macro snapshot")
+        from chain_metrics.macro import collect_macro_snapshot
+        result = collect_macro_snapshot()
+        print(f"\nMacro Snapshot:")
+        print(f"  BTC: ${result['btc_price']:,.0f}")
+        print(f"  BTC Dominance: {result['btc_dominance']:.1f}%")
+        print(f"  SOL/BTC: {result['sol_btc_ratio']:.6f}")
+        if result['funding_avg'] is not None:
+            print(f"  SOL Funding: {result['funding_avg']:.4f}")
+        print(f"  Stablecoin Total: ${result['stablecoin_total'] / 1e9:.1f}B")
+        print(f"  Regime Signal: {result['regime_signal']}")
 
     else:
         # Assume it's a token address
