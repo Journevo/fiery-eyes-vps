@@ -18,36 +18,37 @@ log = get_logger("youtube.channels")
 CACHE_FILE = Path(__file__).parent / "channel_cache.json"
 
 TIER_1 = [
-    {"name": "InvestAnswers", "handle": "@investaborad", "channel_id": "UCH6KS5IiLfTyunVHPCDYT8Q"},
-    {"name": "Coin Bureau", "handle": "@CoinBureau", "channel_id": "UCTULWwXF7dj19_ovr7rbgog"},
+    # --- Core macro / infrastructure ---
+    {"name": "InvestAnswers", "handle": "@InvestAnswers", "channel_id": "UClgJyzwGs-GyaNxUHcLZrkg"},
     {"name": "Benjamin Cowen", "handle": "@intocryptoverse", "channel_id": "UCRvqjQPSeaWn-uEx-w0XOIg"},
-    {"name": "Coin Bureau Clips", "handle": "@CoinBureauClips"},
+    {"name": "Coin Bureau", "handle": "@CoinBureau", "channel_id": "UCTULWwXF7dj19_ovr7rbgog"},
+    {"name": "Raoul Pal", "handle": "@RaoulPalJourneyMan", "channel_id": "UCVFSzL3VuZKP3cN9IXdLOtw"},
+    {"name": "Bankless", "handle": "@Bankless", "channel_id": "UCAl9Ld79qaZxp9JzEOwd3aA"},
+    {"name": "The Breakdown", "handle": "@TheBreakdownNLW", "channel_id": "UCMKxYhVC2lJat7iB9Gec5kw"},
+    {"name": "Lyn Alden", "handle": "@LynAlden", "channel_id": "UC26OTzxt9ixdrr3qdUJrYBQ"},
+    # --- Crypto markets / analysis ---
     {"name": "DataDash", "handle": "@DataDash", "channel_id": "UCCatR7nWbYrkVXdxXb4cGXw"},
-    {"name": "Lark Davis", "handle": "@TheCryptoLark", "channel_id": "UCl2oCaw8hdR_kbqyqd2klIA"},
-    {"name": "Altcoin Daily", "handle": "@AltcoinDaily", "channel_id": "UCbLhGKVY-bJPcuxxvN2WzKA"},
-    {"name": "Anthony Pompliano", "handle": "@AnthonyPompliano", "channel_id": "UCnzCGCGlq0eJ_NkhGNOt2OQ"},
-    {"name": "Raoul Pal", "handle": "@RaoulPal", "channel_id": "UCR8PGPFMso2bftEt3JaIMCQ"},
-    {"name": "Miles Deutscher", "handle": "@MilesDeutscher", "channel_id": "UCYkE4VjBB3RMvUxuDhDLxTw"},
-    {"name": "SolanaFloor", "handle": "@SolanaFloor"},
-    {"name": "HovWaves", "handle": "@HovWaves"},
-    {"name": "SavageCharts", "handle": "@SavageCharts"},
+    {"name": "Altcoin Daily", "handle": "@AltcoinDaily", "channel_id": "UCbLhGKVY-bJPcawebgtNfbw"},
+    {"name": "Anthony Pompliano", "handle": "@AnthonyPompliano", "channel_id": "UCevXpeL8cNyAnww-NqJ4m2w"},
     {"name": "Ivan on Tech", "handle": "@IvanonTech", "channel_id": "UCrYmtJBtLdtm2ov84ulV-yg"},
     {"name": "Crypto Banter", "handle": "@CryptoBanterGroup", "channel_id": "UCN9Nj4tjXbVTLYWN0EKly_Q"},
+    {"name": "Lark Davis", "handle": "@TheCryptoLark", "channel_id": "UCl2oCaw8hdR_kbqyqd2klIA"},
+    {"name": "Miles Deutscher", "handle": "@MilesDeutscher", "channel_id": "UCVVX-7tHff75fRAEEEnZiAQ"},
 ]
 
 TIER_2 = [
     {"name": "Real Vision", "handle": "@RealVisionPresents", "channel_id": "UCBH5VZE_Y4F3CMcPIzPEB5A"},
-    {"name": "Codie Sanchez", "handle": "@CodieSanchez"},
-    {"name": "Alex Hormozi", "handle": "@AlexHormozi"},
-    {"name": "Diary of a CEO", "handle": "@TheDiaryOfACEO"},
-    {"name": "Daily Stoic", "handle": "@DailyStoic"},
-    {"name": "Patrick Boyle", "handle": "@PBoyle", "channel_id": "UCASM3CGMneOMHBaEbqdBH0g"},
+    {"name": "Wolf of All Streets", "handle": "@ScottMelker", "channel_id": "UCxIU1RFIdDpvA8VOITswQ1A"},
+    {"name": "CryptoCon", "handle": "@CryptoCon", "channel_id": "UCdoz_Hi--I26WH8sY2Qx3bg"},
+    {"name": "Crypto Crew University", "handle": "@CryptoCrewUniversity", "channel_id": "UC7ndkZ4vViKiM7kVEgdrlZQ"},
+    {"name": "Patrick Boyle", "handle": "@PBoyle", "channel_id": "UCASM0cgfkJxQ1ICmRilfHLw"},
 ]
 
 TIER_3_EXCLUDED = [
     "Tom Bilyeu", "Lex Fridman", "Huberman", "Joe Rogan",
     "Brian Jung", "Johnny Harris", "Dr Berg",
     "DLM Christian Lifestyle", "belvoir_london",
+    "Codie Sanchez", "Alex Hormozi", "Diary of a CEO", "Daily Stoic",
 ]
 
 

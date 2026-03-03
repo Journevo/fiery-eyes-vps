@@ -24,7 +24,7 @@ from xml.etree import ElementTree
 import requests
 from youtube_transcript_api import YouTubeTranscriptApi
 
-from config import ANTHROPIC_API_KEY, YOUTUBE_COOKIES_FILE, get_logger
+from config import ANTHROPIC_API_KEY, YOUTUBE_COOKIES_FILE, YOUTUBE_PROXY_URL, get_logger
 from db.connection import execute, execute_one
 from telegram_bot.alerts import _send, send_message
 
@@ -170,7 +170,7 @@ def _build_ytt_client() -> YouTubeTranscriptApi:
     """Build YouTubeTranscriptApi with optional proxy and/or cookies."""
     from youtube_transcript_api.proxies import GenericProxyConfig
 
-    proxy_url = os.environ.get("YOUTUBE_PROXY", "")
+    proxy_url = YOUTUBE_PROXY_URL
     proxy_cfg = GenericProxyConfig(https_url=proxy_url) if proxy_url else None
 
     # Load cookies from cookies.txt into a requests Session if available
@@ -184,6 +184,13 @@ def _build_ytt_client() -> YouTubeTranscriptApi:
             session.cookies = jar
         except Exception as e:
             log.debug("Failed to load cookies.txt for transcript-api: %s", e)
+
+    # Route session through proxy if configured
+    if proxy_url and session:
+        session.proxies = {"https": proxy_url, "http": proxy_url}
+    elif proxy_url:
+        session = requests.Session()
+        session.proxies = {"https": proxy_url, "http": proxy_url}
 
     return YouTubeTranscriptApi(proxy_config=proxy_cfg, http_client=session)
 
@@ -221,6 +228,8 @@ def _download_captions_ytdlp(video_url: str, video_id: str) -> str | None:
         ]
         if COOKIES_FILE.exists():
             cmd.extend(["--cookies", str(COOKIES_FILE)])
+        if YOUTUBE_PROXY_URL:
+            cmd.extend(["--proxy", YOUTUBE_PROXY_URL])
         cmd.append(video_url)
 
         subprocess.run(cmd, capture_output=True, text=True, timeout=60)
@@ -850,10 +859,14 @@ def run_youtube_scan():
     """Main entry: scan all channels for new videos, process each."""
     log.info("=== YouTube Channel Scan ===")
 
+    if YOUTUBE_PROXY_URL:
+        log.info("Using proxy: %s", YOUTUBE_PROXY_URL)
+    else:
+        log.warning("No proxy configured (YOUTUBE_PROXY_URL) — transcripts will likely fail on datacenter IPs")
     if COOKIES_FILE.exists():
         log.info("YouTube cookies loaded from %s", COOKIES_FILE)
     else:
-        log.warning("No cookies file at %s — transcripts may fail on datacenter IPs (RSS-only fallback)", COOKIES_FILE)
+        log.debug("No cookies file at %s", COOKIES_FILE)
 
     # Use tier-based config, resolve any missing channel IDs
     from youtube.channels import get_active_channels, ensure_channel_ids
@@ -881,7 +894,7 @@ def run_youtube_scan():
             if pub:
                 if pub.tzinfo is None:
                     pub = pub.replace(tzinfo=timezone.utc)
-                if pub < datetime.now(timezone.utc) - timedelta(hours=24):
+                if pub < datetime.now(timezone.utc) - timedelta(hours=48):
                     continue
 
             if _is_processed(video["video_id"]):
