@@ -5,10 +5,11 @@ Runs continuously:
 - Every 3min: Check Tier 1 KOL wallets
 - Every 10min: Check Tier 2 KOL wallets, detect convergence
 - Every 15min: Score Hatchling tokens
-- Every 30min: Score Runner tokens, check DexScreener trending
-- Every 4h:  Score Established tokens, generate Huoyan pulse, update regime
+- Every 30min: Score Runner tokens, smart money HIGH poll
+- Every 2h:  Smart money MEDIUM poll
+- Every 4h:  Holdings+macro snapshot → Huoyan pulse → regime update → established scoring
 - Daily 03:00: Moonbag reaper
-- Daily 06:00: Morning briefing (extended Huoyan)
+- Daily 06:00: Chain adoption metrics (DeFiLlama)
 
 KK Telegram listener runs in separate service (fiery-eyes-kk).
 """
@@ -30,6 +31,8 @@ INTERVAL_SMART_MONEY_MEDIUM = 7200  # 2hr — MEDIUM generic
 INTERVAL_ESTABLISHED = 14400
 INTERVAL_HUOYAN = 14400
 INTERVAL_REGIME = 14400
+INTERVAL_HOLDINGS_MACRO = 14400     # 4h — aligned with Huoyan pulse
+INTERVAL_CHAIN_METRICS = 86400      # 24h — daily
 
 # Last run timestamps — staggered so Helius-heavy tasks cascade on startup
 # instead of all firing on the first tick.
@@ -44,6 +47,8 @@ _last_run = {
     'established': _now,          # first fire at +14400s
     'huoyan': _now,
     'regime': _now,
+    'holdings_macro': _now,        # first fire at +14400s (aligned with huoyan)
+    'chain_metrics': _now,         # first fire at daily 06:00 UTC
     'moonbag_reaper': 0,
 }
 
@@ -198,6 +203,30 @@ def run_shadow_update():
         log.error("Shadow update failed: %s", e)
 
 
+def run_holdings_macro():
+    """Collect holdings health + macro regime snapshot (every 4h, before Huoyan)."""
+    try:
+        from chain_metrics.holdings import collect_holdings_health
+        collect_holdings_health()
+    except Exception as e:
+        log.error("Holdings health collection failed: %s", e)
+    try:
+        from chain_metrics.macro import collect_macro_snapshot
+        collect_macro_snapshot()
+    except Exception as e:
+        log.error("Macro snapshot collection failed: %s", e)
+
+
+def run_chain_metrics():
+    """Collect chain adoption metrics from DeFiLlama (daily)."""
+    try:
+        from chain_metrics.adoption import collect_chain_metrics
+        result = collect_chain_metrics()
+        log.info("Chain metrics: %d rows stored", result.get("rows_stored", 0))
+    except Exception as e:
+        log.error("Chain metrics collection failed: %s", e)
+
+
 def main_loop():
     """Main daemon loop."""
     log.info("Fiery Eyes v2 main loop starting")
@@ -267,6 +296,11 @@ def main_loop():
                 ).start()
                 _mark_run('established')
 
+            # Holdings + macro snapshot — every 4h (runs before Huoyan so pulse has fresh data)
+            if _should_run('holdings_macro', INTERVAL_HOLDINGS_MACRO):
+                run_holdings_macro()  # synchronous so data is ready for pulse
+                _mark_run('holdings_macro')
+
             if _should_run('huoyan', INTERVAL_HUOYAN):
                 threading.Thread(target=run_huoyan, daemon=True).start()
                 _mark_run('huoyan')
@@ -274,6 +308,12 @@ def main_loop():
             if _should_run('regime', INTERVAL_REGIME):
                 threading.Thread(target=run_regime, daemon=True).start()
                 _mark_run('regime')
+
+            # Chain adoption metrics — daily at 06:00 UTC
+            if now.hour == 6 and now.minute < 2:
+                if _should_run('chain_metrics', INTERVAL_CHAIN_METRICS):
+                    threading.Thread(target=run_chain_metrics, daemon=True).start()
+                    _mark_run('chain_metrics')
 
             # Daily moonbag reaper at 03:00 UTC
             if now.hour == 3 and now.minute < 2:
