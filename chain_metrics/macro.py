@@ -111,6 +111,26 @@ def _fetch_funding_avg() -> float | None:
         return None
 
 
+def _fetch_fear_greed() -> tuple[int | None, str | None]:
+    """Fetch Fear & Greed Index from alternative.me (free, no key).
+
+    Returns (value, classification) e.g. (25, "Extreme Fear").
+    """
+    try:
+        data = get_json("https://api.alternative.me/fng/?limit=1")
+        record_api_call("fear_greed_index", True)
+        items = data.get("data", [])
+        if items:
+            value = int(items[0].get("value", 0))
+            label = items[0].get("value_classification", "Neutral")
+            return value, label
+        return None, None
+    except Exception as e:
+        log.error("Fear & Greed index fetch failed: %s", e)
+        record_api_call("fear_greed_index", False)
+        return None, None
+
+
 # ---------------------------------------------------------------------------
 # Regime classification
 # ---------------------------------------------------------------------------
@@ -184,6 +204,7 @@ def collect_macro_snapshot():
     sol_btc_ratio = sol_price / btc_price if btc_price else 0
     stablecoin_total = _fetch_stablecoin_total()
     funding_avg = _fetch_funding_avg()
+    fear_greed, fear_greed_label = _fetch_fear_greed()
 
     regime_signal = _classify_regime(btc_dominance, sol_btc_ratio,
                                      funding_avg, stablecoin_total)
@@ -191,16 +212,17 @@ def collect_macro_snapshot():
     execute(
         """INSERT INTO macro_regime_v2
            (btc_price, btc_dominance, sol_btc_ratio, funding_avg,
-            stablecoin_total, regime_signal)
-           VALUES (%s, %s, %s, %s, %s, %s)""",
+            stablecoin_total, regime_signal, fear_greed, fear_greed_label)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
         (btc_price, btc_dominance, sol_btc_ratio, funding_avg,
-         stablecoin_total, regime_signal),
+         stablecoin_total, regime_signal, fear_greed, fear_greed_label),
     )
 
     log.info("Macro snapshot: BTC $%.0f | Dom %.1f%% | SOL/BTC %.6f | "
-             "Stables $%.0fB | Regime %s",
+             "Stables $%.0fB | F&G %s (%s) | Regime %s",
              btc_price, btc_dominance, sol_btc_ratio,
-             stablecoin_total / 1e9 if stablecoin_total else 0, regime_signal)
+             stablecoin_total / 1e9 if stablecoin_total else 0,
+             fear_greed, fear_greed_label, regime_signal)
 
     result = {
         "btc_price": btc_price,
@@ -209,6 +231,8 @@ def collect_macro_snapshot():
         "funding_avg": funding_avg,
         "stablecoin_total": stablecoin_total,
         "regime_signal": regime_signal,
+        "fear_greed": fear_greed,
+        "fear_greed_label": fear_greed_label,
     }
 
     # Check for macro alert conditions
@@ -237,14 +261,14 @@ def get_macro_summary() -> dict:
     """
     row = execute_one(
         """SELECT btc_price, btc_dominance, sol_btc_ratio, funding_avg,
-                  stablecoin_total, regime_signal
+                  stablecoin_total, regime_signal, fear_greed, fear_greed_label
            FROM macro_regime_v2
            ORDER BY timestamp DESC LIMIT 1""",
     )
     if not row:
         return {}
 
-    btc_price, btc_dom, sol_btc, funding, stable_total, regime = row
+    btc_price, btc_dom, sol_btc, funding, stable_total, regime, fg_val, fg_label = row
 
     # Previous snapshot for trend
     prev = execute_one(
@@ -279,6 +303,8 @@ def get_macro_summary() -> dict:
         "regime_signal": regime or "NEUTRAL",
         "sol_btc_trend": sol_btc_trend,
         "dom_trend": dom_trend,
+        "fear_greed": int(fg_val) if fg_val is not None else None,
+        "fear_greed_label": fg_label,
     }
 
 

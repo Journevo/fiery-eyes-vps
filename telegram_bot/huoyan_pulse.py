@@ -129,6 +129,12 @@ def _macro_regime_section() -> list[str]:
                     label = "fearful"
                 lines.append(f"  Funding: {funding:.4f} ({label})")
 
+            # Fear & Greed
+            fg = macro.get("fear_greed")
+            fg_label = macro.get("fear_greed_label")
+            if fg is not None:
+                lines.append(f"  Sentiment: {fg} ({fg_label})")
+
             # Stablecoin total
             stable = macro.get("stablecoin_total", 0)
             if stable:

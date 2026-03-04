@@ -253,6 +253,13 @@ def collect_chain_metrics():
             stored += 1
 
     log.info("Chain metrics stored: %d rows for %s", stored, today)
+
+    # Check for stablecoin flow alerts
+    try:
+        _check_stablecoin_flow_alert()
+    except Exception as e:
+        log.error("Stablecoin flow alert check failed: %s", e)
+
     return {"date": str(today), "rows_stored": stored}
 
 
@@ -350,3 +357,63 @@ def get_solana_trend(chains: dict | None = None) -> str:
     if avg_change > -5:
         return "losing"
     return "decelerating"
+
+
+# ---------------------------------------------------------------------------
+# Stablecoin flow alerts — uses shared macro_alert_log for dedup
+# ---------------------------------------------------------------------------
+
+def _check_stablecoin_flow_alert():
+    """Alert on large weekly stablecoin inflow/outflow on Solana (>$100M).
+
+    Uses macro_alert_log table for 24h dedup, shared with macro alerts.
+    """
+    # Get latest Solana stablecoin mcap
+    current = execute_one(
+        """SELECT value FROM chain_metrics
+           WHERE chain = 'Solana' AND metric_name = 'stablecoin_mcap'
+           ORDER BY date DESC LIMIT 1""",
+    )
+    # Get ~7d ago
+    prev = execute_one(
+        """SELECT value FROM chain_metrics
+           WHERE chain = 'Solana' AND metric_name = 'stablecoin_mcap'
+             AND date <= CURRENT_DATE - INTERVAL '6 days'
+           ORDER BY date DESC LIMIT 1""",
+    )
+
+    if not current or not prev or not current[0] or not prev[0]:
+        return
+
+    current_val = float(current[0])
+    prev_val = float(prev[0])
+    flow = current_val - prev_val
+
+    if abs(flow) < 100_000_000:  # $100M threshold
+        return
+
+    # Check dedup via macro_alert_log
+    from chain_metrics.macro import _ensure_alert_table, _alert_already_sent, _send_macro_alert
+
+    _ensure_alert_table()
+
+    if flow > 0:
+        alert_type = "stablecoin_inflow"
+        if _alert_already_sent(alert_type):
+            return
+        msg = (
+            f"💵 <b>STABLECOIN INFLOW — SOLANA</b>\n"
+            f"+${flow / 1e6:.0f}M this week (${current_val / 1e9:.1f}B total)\n"
+            f"Capital flowing into Solana ecosystem"
+        )
+        _send_macro_alert(alert_type, 2, msg)
+    else:
+        alert_type = "stablecoin_outflow"
+        if _alert_already_sent(alert_type):
+            return
+        msg = (
+            f"⚠️ <b>STABLECOIN OUTFLOW — SOLANA</b>\n"
+            f"-${abs(flow) / 1e6:.0f}M this week (${current_val / 1e9:.1f}B total)\n"
+            f"Capital leaving Solana ecosystem"
+        )
+        _send_macro_alert(alert_type, 2, msg)

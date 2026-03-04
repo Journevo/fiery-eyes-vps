@@ -335,31 +335,69 @@ def _handle_status():
 
 
 def _handle_portfolio():
-    """Handle /portfolio command."""
+    """Handle /portfolio — instant macro-focused portfolio snapshot from DB."""
     try:
-        from risk.portfolio import get_portfolio_summary
+        from db.connection import execute_one
+        lines = ["💼 <b>PORTFOLIO SNAPSHOT</b>", ""]
 
-        summary = get_portfolio_summary()
-        tiers = summary["tiers"]
-
-        lines = [
-            "💼 <b>PORTFOLIO SUMMARY</b>",
-            "",
-            f"Total allocated: {summary['total_allocated_pct']:.1f}%",
-            f"Cash: {summary['cash_pct']:.1f}%",
-            f"Open positions: {summary['open_positions']}",
-            "",
-            "<b>By Tier:</b>",
-        ]
-
-        for tier_num in sorted(tiers.keys()):
-            t = tiers[tier_num]
-            lines.append(
-                f"  T{tier_num} {t['name']}: {t['allocated_pct']:.1f}% / {t['target_pct']:.0f}% "
-                f"({t['position_count']}/{t['max_positions']} pos)"
+        # Holdings from latest holdings_health
+        _fmt = {"SOL": ".2f", "JUP": ".4f", "PUMPFUN": ".6f"}
+        _labels = {"SOL": "SOL", "JUP": "JUP", "PUMPFUN": "PUMP"}
+        for token in ("SOL", "JUP", "PUMPFUN"):
+            row = execute_one(
+                """SELECT price_usd, custom_metrics FROM holdings_health
+                   WHERE token = %s ORDER BY timestamp DESC LIMIT 1""",
+                (token,),
             )
-            if t["tokens"]:
-                lines.append(f"     {', '.join(t['tokens'][:5])}")
+            if not row or not row[0]:
+                continue
+            price = float(row[0])
+            metrics = row[1] if isinstance(row[1], dict) else {}
+            change_7d = metrics.get("change_7d", 0)
+            arrow = "📈" if change_7d > 0 else "📉" if change_7d < 0 else "➡️"
+
+            extras = []
+            if metrics.get("sol_btc_ratio"):
+                extras.append(f"SOL/BTC: {metrics['sol_btc_ratio']:.6f}")
+            if metrics.get("fees_24h"):
+                extras.append(f"Fees: ${metrics['fees_24h'] / 1e3:.0f}K/24h")
+            extra_str = f" | {', '.join(extras)}" if extras else ""
+            price_str = f"${price:{_fmt[token]}}"
+            lines.append(f"  {arrow} {_labels[token]}: {price_str} (7d: {change_7d:+.1f}%){extra_str}")
+
+        lines.append("")
+
+        # Macro regime + F&G
+        row = execute_one(
+            """SELECT regime_signal, fear_greed, fear_greed_label,
+                      btc_price, btc_dominance, sol_btc_ratio
+               FROM macro_regime_v2 ORDER BY timestamp DESC LIMIT 1""",
+        )
+        if row:
+            regime, fg, fg_label, btc, dom, ratio = row
+            regime_map = {"RISK_ON": "🟢", "RISK_OFF": "🔴", "NEUTRAL": "⚪"}
+            regime_icon = regime_map.get(regime, "⚪")
+            fg_str = f" | F&G: {fg} ({fg_label})" if fg is not None else ""
+            lines.append(f"  {regime_icon} Regime: {regime}{fg_str}")
+            lines.append(f"  BTC: ${float(btc or 0):,.0f} | Dom: {float(dom or 0):.1f}%")
+
+        # Solana chain position
+        row = execute_one(
+            """SELECT value FROM chain_metrics
+               WHERE chain = 'Solana' AND metric_name = 'dex_volume'
+               ORDER BY date DESC LIMIT 1""",
+        )
+        if row and row[0]:
+            sol_dex = float(row[0])
+            total_row = execute_one(
+                """SELECT SUM(value) FROM chain_metrics
+                   WHERE metric_name = 'dex_volume'
+                     AND date = (SELECT MAX(date) FROM chain_metrics)""",
+            )
+            total_dex = float(total_row[0]) if total_row and total_row[0] else 0
+            share = (sol_dex / total_dex * 100) if total_dex else 0
+            lead = "DEX lead" if share > 30 else "DEX competitive" if share > 20 else "DEX trailing"
+            lines.append(f"  Chain: Solana {lead}, {share:.0f}% share")
 
         _send("\n".join(lines))
     except Exception as e:

@@ -231,6 +231,12 @@ def _macro_shifts() -> list[str]:
             else:
                 f_label = "Moderate"
             lines.append(f"  Funding: {funding:.4f} ({f_label})")
+
+        # Fear & Greed
+        fg = summary.get("fear_greed")
+        fg_label = summary.get("fear_greed_label")
+        if fg is not None:
+            lines.append(f"  Sentiment: {fg} ({fg_label})")
     except Exception as e:
         log.error("Macro shifts section: %s", e)
         lines.append("  Macro data unavailable")
