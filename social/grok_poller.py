@@ -340,13 +340,20 @@ def _store_signal(handle: str, tweet_id: str, tweet_text: str,
             log.debug("Token resolve failed for $%s: %s",
                       parsed.get("token_symbol"), e)
 
+    # Compute signal category (macro/ecosystem/risk/infra/meme/info)
+    try:
+        from social.smart_money_parsers import categorize_signal
+        category = categorize_signal(tweet_text, parsed)
+    except Exception:
+        category = "info"
+
     try:
         execute(
             """INSERT INTO x_intelligence
                (source_handle, tweet_id, tweet_text, parsed_type,
                 token_address, token_symbol, wallet_address, amount_usd,
-                signal_strength, raw_data)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                signal_strength, raw_data, signal_category)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                ON CONFLICT (tweet_id) DO NOTHING""",
             (f"@{handle}", tweet_id, tweet_text,
              parsed.get("parsed_type"),
@@ -355,7 +362,8 @@ def _store_signal(handle: str, tweet_id: str, tweet_text: str,
              parsed.get("wallet_address"),
              parsed.get("amount_usd"),
              parsed.get("signal_strength"),
-             json.dumps(parsed.get("extra", {}))),
+             json.dumps(parsed.get("extra", {})),
+             category),
         )
         return True
     except Exception as e:
@@ -654,12 +662,13 @@ def get_recent_x_signals(hours: int = 4,
     try:
         rows = execute(
             f"""SELECT source_handle, parsed_type, token_symbol, token_address,
-                       amount_usd, signal_strength, raw_data, detected_at
+                       amount_usd, signal_strength, raw_data, detected_at,
+                       COALESCE(signal_category, 'info') as signal_category
                 FROM x_intelligence
                 WHERE detected_at > NOW() - INTERVAL '{int(hours)} hours'
                   AND signal_strength IN ({placeholders})
                 ORDER BY detected_at DESC
-                LIMIT 8""",
+                LIMIT 15""",
             tuple(allowed),
             fetch=True,
         )
@@ -674,6 +683,7 @@ def get_recent_x_signals(hours: int = 4,
                 "signal_strength": r[5],
                 "raw_data": r[6],
                 "detected_at": r[7],
+                "signal_category": r[8],
             }
             for r in (rows or [])
         ]

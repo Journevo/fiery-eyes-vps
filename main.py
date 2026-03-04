@@ -39,6 +39,7 @@ Commands:
   python main.py chain-metrics               Collect chain adoption data (DeFiLlama)
   python main.py holdings                    Collect holdings health (SOL/JUP/Pump.fun)
   python main.py macro-snapshot              Collect enhanced macro regime snapshot
+  python main.py weekly-review               Generate and send weekly portfolio review
 """
 
 import sys
@@ -555,6 +556,12 @@ def main():
             print(f"  SOL Funding: {result['funding_avg']:.4f}")
         print(f"  Stablecoin Total: ${result['stablecoin_total'] / 1e9:.1f}B")
         print(f"  Regime Signal: {result['regime_signal']}")
+
+    elif cmd == "weekly-review":
+        log.info("Generating weekly portfolio review")
+        from reports.weekly_review import generate_weekly_review
+        generate_weekly_review()
+        print("Weekly review sent to Huoyan channel")
 
     else:
         # Assume it's a token address

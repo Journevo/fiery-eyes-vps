@@ -181,12 +181,26 @@ def collect_holdings_health():
         stored += 1
         log.info("JUP: $%.4f", jup["price_usd"])
 
-    # Pump.fun
+    # Pump.fun token price
     pf = _fetch_pumpfun_health()
-    if pf["price_usd"]:
+    # Enrich with protocol metrics from DeFiLlama
+    try:
+        from chain_metrics.pumpfun import fetch_pumpfun_protocol_metrics
+        proto = fetch_pumpfun_protocol_metrics()
+        if proto:
+            pf["custom_metrics"]["fees_24h"] = proto.get("fees_24h", 0)
+            pf["custom_metrics"]["fees_7d"] = proto.get("fees_7d", 0)
+            pf["custom_metrics"]["fees_30d"] = proto.get("fees_30d", 0)
+            pf["custom_metrics"]["fees_change_1d"] = proto.get("fees_change_1d", 0)
+            pf["custom_metrics"]["protocol_volume_24h"] = proto.get("volume_24h", 0)
+            pf["custom_metrics"]["protocol_volume_7d"] = proto.get("volume_7d", 0)
+    except Exception as e:
+        log.error("Pump.fun protocol metrics failed: %s", e)
+    if pf["price_usd"] or pf["custom_metrics"].get("fees_24h"):
         _store_holding("PUMPFUN", pf["price_usd"], pf["custom_metrics"])
         stored += 1
-        log.info("PUMPFUN: $%.6f", pf["price_usd"])
+        fees = pf["custom_metrics"].get("fees_24h", 0)
+        log.info("PUMPFUN: $%.6f | Fees: $%.0f/24h", pf["price_usd"], fees)
 
     log.info("Holdings health stored: %d tokens", stored)
     return {"tokens_stored": stored}

@@ -165,12 +165,23 @@ def _chain_scorecard_section() -> list[str]:
             dex_pct = sol.get("dex_volume_7d_pct", 0)
             stable = sol.get("stablecoin_mcap", 0)
             stable_pct = sol.get("stablecoin_mcap_7d_pct", 0)
+            fees = sol.get("fees", 0)
+            fees_pct = sol.get("fees_7d_pct", 0)
+            addrs = sol.get("active_addresses", 0)
+            addrs_pct = sol.get("active_addresses_7d_pct", 0)
             lines.append(
                 f"  SOL: TVL ${tvl / 1e9:.1f}B ({tvl_pct:+.1f}%) | "
                 f"DEX ${dex / 1e9:.1f}B ({dex_pct:+.1f}%)"
             )
+            extras = []
+            if fees:
+                extras.append(f"Fees ${fees / 1e6:.1f}M ({fees_pct:+.1f}%)")
+            if addrs:
+                extras.append(f"Addrs {addrs / 1e6:.1f}M ({addrs_pct:+.1f}%)")
             if stable:
-                lines.append(f"  Stables: ${stable / 1e9:.1f}B ({stable_pct:+.1f}%)")
+                extras.append(f"Stables ${stable / 1e9:.1f}B")
+            if extras:
+                lines.append(f"  {' | '.join(extras)}")
             # Compare vs ETH
             eth = chains.get("Ethereum", {})
             if eth:
@@ -216,7 +227,11 @@ def _holdings_health_section() -> list[str]:
                     lines.append(f"  JUP: ${price:.4f} (7d: {change:+.1f}%) {arrow}")
                 elif token == "PUMPFUN":
                     label = h.get("symbol", "PUMP")
-                    lines.append(f"  {label}: ${price:.6f} (7d: {change:+.1f}%) {arrow}")
+                    fees_24h = h.get("fees_24h", 0)
+                    proto_vol = h.get("protocol_volume_24h", 0)
+                    fees_str = f" | Fees: ${fees_24h / 1e3:.0f}K/24h" if fees_24h else ""
+                    vol_str = f" | Vol: ${proto_vol / 1e6:.0f}M" if proto_vol else ""
+                    lines.append(f"  {label}: ${price:.6f} (7d: {change:+.1f}%){fees_str}{vol_str} {arrow}")
         else:
             lines.append("  No holdings data yet — run holdings")
     except Exception:
@@ -332,24 +347,56 @@ def _youtube_section() -> list[str]:
 
 
 def _x_intelligence_section() -> list[str]:
-    """X smart money signals from last 4 hours."""
+    """X smart money signals from last 4 hours, grouped by category."""
     lines = ["<b>📡 X Intelligence</b>"]
     try:
         from social.grok_poller import get_recent_x_signals
         signals = get_recent_x_signals(hours=4, min_strength="medium")
-        if signals:
-            for sig in signals[:5]:
+        if not signals:
+            lines.append("  ⚪ No smart money signals in 4h")
+            lines.append("")
+            return lines
+
+        # Group by category
+        groups = {}
+        for sig in signals:
+            cat = sig.get("signal_category", "info")
+            groups.setdefault(cat, []).append(sig)
+
+        # Display order: risk > macro > ecosystem > infra > meme
+        cat_config = [
+            ("risk",      "⚠️ Risk Alerts"),
+            ("macro",     "📊 Macro"),
+            ("ecosystem", "🔗 SOL Ecosystem"),
+            ("infra",     "🏗 Infrastructure"),
+            ("meme",      "🎰 Meme Activity"),
+        ]
+
+        shown = 0
+        for cat_key, cat_label in cat_config:
+            sigs = groups.get(cat_key, [])
+            if not sigs:
+                continue
+            lines.append(f"  <b>{cat_label}</b>")
+            for sig in sigs[:2]:
                 handle = sig.get("source_handle", "?")
-                ptype = sig.get("parsed_type", "info")
-                symbol = sig.get("token_symbol") or "?"
+                symbol = sig.get("token_symbol")
                 strength = sig.get("signal_strength", "?")
                 amount = sig.get("amount_usd")
 
                 icon = "🔴" if strength == "strong" else "🟡"
+                sym_str = f" ${symbol}" if symbol else ""
                 amount_str = f" (${amount:,.0f})" if amount else ""
-                lines.append(f"  {icon} {handle}: {ptype} ${symbol}{amount_str} [{strength}]")
-        else:
-            lines.append("  ⚪ No smart money signals in 4h")
+                ptype = sig.get("parsed_type", "info")
+                lines.append(f"    {icon} {handle}: {ptype}{sym_str}{amount_str}")
+                shown += 1
+            if shown >= 6:
+                break
+
+        # Uncategorized / info signals — show count only
+        info_count = len(groups.get("info", []))
+        if info_count and shown == 0:
+            lines.append(f"  {info_count} general signals (no macro/risk themes)")
     except Exception as e:
         log.debug("X intelligence section error: %s", e)
         lines.append("  X data unavailable")

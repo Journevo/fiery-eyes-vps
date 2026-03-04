@@ -399,6 +399,83 @@ def parse_generic_tweet(tweet_text: str) -> dict:
     return sig
 
 
+# --- Macro/infra signal categorization ---
+
+# Keywords for macro-level signal classification
+_MACRO_KEYWORDS = {
+    "rate cut", "rate hike", "rate pause", "fomc", "fed ", "federal reserve",
+    "cpi ", "ppi ", "gdp ", "inflation", "recession", "soft landing",
+    "hard landing", "quantitative", "liquidity", "money printer",
+    "dxy ", "dollar index", "treasury", "yields", "bond",
+    "etf approval", "etf filing", "etf inflow", "etf outflow",
+    "institutional", "blackrock", "fidelity", "grayscale",
+    "macro ", "global liquidity", "risk on", "risk off",
+    "tariff", "trade war", "sanctions",
+}
+
+_ECOSYSTEM_KEYWORDS = {
+    "solana", "sol ecosystem", "sol tvl", "sol dex", "sol defi",
+    "jupiter", "jup ", "raydium", "orca ", "marinade", "jito",
+    "pump.fun", "pumpfun", "pump fun", "pumpswap",
+    "firedancer", "frankendancer", "solana mobile", "saga",
+    "solana depin", "helium", "hivemapper", "render",
+    "pyth", "wormhole", "drift protocol",
+    "sol staking", "validator", "tps ", "solana tps",
+    "active addresses", "tvl milestone", "new protocol",
+    "chain adoption", "network growth", "developer activity",
+}
+
+_RISK_KEYWORDS = {
+    "hack", "hacked", "exploit", "exploited", "vulnerability",
+    "rug pull", "rugpull", "rugged", "scam ",
+    "outage", "down ", "halted", "congestion",
+    "sec ", "cftc", "regulatory", "regulation", "lawsuit",
+    "depegged", "depeg", "liquidation cascade", "black swan",
+    "tether ", "usdt risk", "usdc risk", "bank run",
+}
+
+_INFRA_TOKENS = {"SOL", "JUP", "RAY", "ORCA", "MNDE", "JTO", "PYTH", "W",
+                 "DRIFT", "TNSR", "PRCL", "HNT", "RENDER", "CLOUD", "IO",
+                 "KMNO", "HYPE", "GRASS", "NOS", "SHDW"}
+
+
+def categorize_signal(tweet_text: str, parsed: dict) -> str:
+    """Categorize a parsed X signal into macro theme.
+
+    Returns one of:
+        "macro"     — macro narratives (rates, ETF, institutional)
+        "ecosystem" — SOL ecosystem developments
+        "risk"      — risk alerts (hacks, regulatory, outages)
+        "infra"     — infrastructure token mentions (SOL/JUP/etc.)
+        "meme"      — individual meme token activity
+        "info"      — general / uncategorized
+    """
+    text_lower = tweet_text.lower()
+
+    # Check risk first (highest priority)
+    if any(kw in text_lower for kw in _RISK_KEYWORDS):
+        return "risk"
+
+    # Macro narratives
+    if any(kw in text_lower for kw in _MACRO_KEYWORDS):
+        return "macro"
+
+    # SOL ecosystem developments
+    if any(kw in text_lower for kw in _ECOSYSTEM_KEYWORDS):
+        return "ecosystem"
+
+    # Infrastructure token mentions
+    symbol = parsed.get("token_symbol")
+    if symbol and symbol in _INFRA_TOKENS:
+        return "infra"
+
+    # Everything else with a token symbol is meme activity
+    if symbol:
+        return "meme"
+
+    return "info"
+
+
 # --- Parser dispatch ---
 
 PARSER_MAP = {

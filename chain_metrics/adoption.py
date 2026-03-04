@@ -1,10 +1,12 @@
-"""Chain Adoption Metrics — DeFiLlama data collector.
+"""Chain Adoption Metrics — DeFiLlama + Santiment data collector.
 
-Fetches TVL, DEX volume, and stablecoin market cap per chain from DeFiLlama.
+Fetches TVL, DEX volume, stablecoin market cap, fee revenue per chain from DeFiLlama.
+Fetches daily active addresses from Santiment (free API, Solana + ETH).
 Stores daily snapshots in chain_metrics table for trend analysis.
 """
 
-from datetime import date
+import time
+from datetime import date, datetime, timezone, timedelta
 from config import get_logger
 from db.connection import execute, execute_one
 from quality_gate.helpers import get_json
@@ -105,6 +107,103 @@ def _fetch_stablecoin_chains() -> dict[str, float]:
         return {}
 
 
+def _fetch_chain_fees() -> dict[str, float]:
+    """GET DeFiLlama fee overview per chain → {chain: daily_fees_usd}.
+
+    Uses per-chain endpoint: /overview/fees/{chain}?excludeTotalDataChart=true
+    """
+    result = {}
+    # DeFiLlama chain slugs (lowercase)
+    chain_slugs = {
+        "Solana": "Solana",
+        "Ethereum": "Ethereum",
+        "Base": "Base",
+        "Sui": "Sui",
+        "Arbitrum": "Arbitrum",
+    }
+    for canon, slug in chain_slugs.items():
+        try:
+            url = (
+                f"https://api.llama.fi/overview/fees/{slug}"
+                "?excludeTotalDataChart=true"
+                "&excludeTotalDataChartBreakdown=true"
+            )
+            data = get_json(url)
+            total_24h = float(data.get("total24h") or 0)
+            if total_24h:
+                result[canon] = total_24h
+            time.sleep(0.3)  # rate limiting between calls
+        except Exception as e:
+            log.debug("DeFiLlama fees for %s failed: %s", canon, e)
+    if result:
+        record_api_call("defillama_chain_fees", True)
+        log.info("Chain fees fetched for %d chains", len(result))
+    return result
+
+
+# Santiment slugs for active address queries
+_SANTIMENT_SLUGS = {
+    "Solana": "solana",
+    "Ethereum": "ethereum",
+}
+
+
+def _fetch_active_addresses() -> dict[str, float]:
+    """Fetch daily active addresses from Santiment free API (Solana + ETH).
+
+    Santiment GraphQL API: https://api.santiment.net/graphql
+    Free tier: 1,000 requests/month, no API key needed.
+    Only Solana + Ethereum supported on free tier.
+    """
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%dT00:00:00Z")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%dT23:59:59Z")
+
+    # Build GraphQL query for all supported chains
+    query_parts = []
+    for canon, slug in _SANTIMENT_SLUGS.items():
+        alias = canon.lower()
+        query_parts.append(
+            f'{alias}: getMetric(metric: "daily_active_addresses") {{\n'
+            f'  timeseriesData(slug: "{slug}" from: "{yesterday}" to: "{today}" interval: "1d") {{\n'
+            f'    datetime\n'
+            f'    value\n'
+            f'  }}\n'
+            f'}}'
+        )
+
+    query = "{\n" + "\n".join(query_parts) + "\n}"
+
+    try:
+        import requests
+        resp = requests.post(
+            "https://api.santiment.net/graphql",
+            json={"query": query},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json().get("data", {})
+        record_api_call("santiment_active_addresses", True)
+
+        result = {}
+        for canon, slug in _SANTIMENT_SLUGS.items():
+            alias = canon.lower()
+            ts_data = data.get(alias, {}).get("timeseriesData", [])
+            if ts_data:
+                # Take the most recent value
+                latest = ts_data[-1].get("value", 0)
+                if latest:
+                    result[canon] = float(latest)
+
+        if result:
+            log.info("Active addresses: %s",
+                     ", ".join(f"{k}: {v:,.0f}" for k, v in result.items()))
+        return result
+    except Exception as e:
+        log.error("Santiment active addresses fetch failed: %s", e)
+        record_api_call("santiment_active_addresses", False)
+        return {}
+
+
 # ---------------------------------------------------------------------------
 # Storage
 # ---------------------------------------------------------------------------
@@ -125,13 +224,15 @@ def _store_chain_metric(d: date, chain: str, metric_name: str, value: float):
 # ---------------------------------------------------------------------------
 
 def collect_chain_metrics():
-    """Daily entry point: fetch all chain data from DeFiLlama and store."""
+    """Daily entry point: fetch all chain data from DeFiLlama + Santiment and store."""
     log.info("Collecting chain adoption metrics...")
     today = date.today()
 
     tvl = _fetch_chain_tvl()
     dex = _fetch_dex_volumes()
     stables = _fetch_stablecoin_chains()
+    fees = _fetch_chain_fees()
+    active_addrs = _fetch_active_addresses()
 
     stored = 0
     for chain in TARGET_CHAINS:
@@ -143,6 +244,12 @@ def collect_chain_metrics():
             stored += 1
         if chain in stables:
             _store_chain_metric(today, chain, "stablecoin_mcap", stables[chain])
+            stored += 1
+        if chain in fees:
+            _store_chain_metric(today, chain, "fees", fees[chain])
+            stored += 1
+        if chain in active_addrs:
+            _store_chain_metric(today, chain, "active_addresses", active_addrs[chain])
             stored += 1
 
     log.info("Chain metrics stored: %d rows for %s", stored, today)
@@ -202,7 +309,7 @@ def get_chain_scorecard() -> dict:
         cur = latest.get(chain, {})
         prv = prev.get(chain, {})
         entry = {}
-        for metric in ("tvl", "dex_volume", "stablecoin_mcap"):
+        for metric in ("tvl", "dex_volume", "stablecoin_mcap", "fees", "active_addresses"):
             cur_val = cur.get(metric, 0)
             prv_val = prv.get(metric, 0)
             pct = ((cur_val - prv_val) / prv_val * 100) if prv_val else 0
