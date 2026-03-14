@@ -35,6 +35,7 @@ TIER_1 = [
     {"name": "Lark Davis", "handle": "@TheCryptoLark", "channel_id": "UCl2oCaw8hdR_kbqyqd2klIA"},
     {"name": "Miles Deutscher", "handle": "@MilesDeutscher", "channel_id": "UCVVX-7tHff75fRAEEEnZiAQ"},
     {"name": "All-In Podcast", "handle": "@alaborofdave", "channel_id": "UCESLZhusAkFfsNsApnjF_Cg"},
+    {"name": "Virtual Bacon", "handle": "@VirtualBacon", "channel_id": "UCcrBKMR8tZEXjjBJVvzNlYQ"},
     {"name": "Real Vision Finance", "handle": "@RealVisionFinance", "channel_id": "UCBH5VZE_Y4F3CMcPIzPEB5A"},
 ]
 

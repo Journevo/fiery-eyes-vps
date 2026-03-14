@@ -225,6 +225,86 @@ async def cmd_scores(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Error: " + str(e))
 
 
+async def cmd_analyse(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Analyse any YouTube video: /analyse <URL>"""
+    try:
+        args = context.args
+        if not args:
+            await update.message.reply_text("Usage: /analyse <YouTube URL>\nExample: /analyse https://youtube.com/watch?v=abc123")
+            return
+        url = args[0]
+
+        # Extract video ID
+        import re
+        match = re.search(r'(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})', url)
+        if not match:
+            await update.message.reply_text("Invalid YouTube URL")
+            return
+        video_id = match.group(1)
+
+        await update.message.reply_text(f"Downloading transcript + running Sonnet analysis...\nThis takes 30-60s for long videos.")
+
+        from social.youtube_free import _download_captions, _analyse_transcript, SONNET_ANALYSIS_PROMPT
+        import requests as req
+
+        # Get transcript
+        transcript = _download_captions(url, video_id)
+        if not transcript or len(transcript) < 100:
+            await update.message.reply_text("Could not get transcript for this video. Check if it has captions.")
+            return
+
+        # Get video title
+        title = "Unknown"
+        try:
+            from config import YOUTUBE_API_KEY
+            if YOUTUBE_API_KEY:
+                r = req.get(f"https://www.googleapis.com/youtube/v3/videos?id={video_id}&key={YOUTUBE_API_KEY}&part=snippet", timeout=10)
+                if r.ok:
+                    items = r.json().get("items", [])
+                    if items:
+                        title = items[0].get("snippet", {}).get("title", "Unknown")
+        except Exception:
+            pass
+
+        await update.message.reply_text(f"Transcript: {len(transcript):,} chars\nTitle: {title}\nAnalysing with Sonnet...")
+
+        # Analyse — force Sonnet + full transcript
+        result = _analyse_transcript(transcript, title, channel_name="All-In Podcast")  # Use priority channel name to trigger Sonnet
+
+        if result and result.get("_essay_format"):
+            text = result["summary"]
+            header = f"\U0001f4fa <b>VIDEO ANALYSIS</b>\n<i>{title}</i>\n\n"
+            full = header + text
+
+            # Split at paragraphs
+            max_len = 4000
+            if len(full) <= max_len:
+                chunks = [full]
+            else:
+                chunks = []
+                current = header
+                for para in text.split("\n\n"):
+                    if current and len(current) + len(para) + 2 > max_len:
+                        chunks.append(current)
+                        current = ""
+                    current = current + "\n\n" + para if current else para
+                if current:
+                    chunks.append(current)
+
+            for chunk in chunks:
+                await update.message.reply_text(chunk, parse_mode="HTML", disable_web_page_preview=True)
+        elif result:
+            # JSON format fallback
+            import json
+            text = json.dumps(result, indent=2, default=str)[:4000]
+            await update.message.reply_text(f"<pre>{text}</pre>", parse_mode="HTML")
+        else:
+            await update.message.reply_text("Analysis failed. The video may be too short or in a non-English language.")
+    except Exception as e:
+        log.error("/analyse error: %s", e)
+        await update.message.reply_text(f"Error: {e}")
+
+
 async def cmd_deepdive(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Deep dive a token: /deepdive <contract_address>"""
     try:
@@ -419,6 +499,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/exits \u2014 stop loss / take profit status\n"
         "/yields \u2014 USDC yield opportunities\n"
         "/scores \u2014 auto-updated token scores\n"
+        "/analyse URL \u2014 analyse any YouTube video\n"
         "/deepdive CA \u2014 full token analysis\n"
         "\n"
         "<b>Tracking:</b>\n"
@@ -588,6 +669,8 @@ def main():
     app.add_handler(CommandHandler("exits", cmd_exits))
     app.add_handler(CommandHandler("yields", cmd_yields))
     app.add_handler(CommandHandler("scores", cmd_scores))
+    app.add_handler(CommandHandler("analyse", cmd_analyse))
+    app.add_handler(CommandHandler("analyze", cmd_analyse))
     app.add_handler(CommandHandler("deepdive", cmd_deepdive))
     app.add_handler(CommandHandler("dd", cmd_deepdive))
     app.add_handler(CommandHandler("pulse", cmd_pulse))

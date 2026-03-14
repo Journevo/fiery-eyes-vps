@@ -456,31 +456,13 @@ def _analyse_transcript(transcript: str, video_title: str = "", channel_name: st
     # High-priority channels get Sonnet for better extraction
     HIGH_PRIORITY = {"All-In Podcast", "Real Vision", "Real Vision Finance",
                      "InvestAnswers", "Benjamin Cowen", "Coin Bureau",
-                     "Bankless", "Altcoin Daily", "Crypto Crew University",
-                     "Crypto Banter", "Raoul Pal", "Lyn Alden"}
+                     "Virtual Bacon", "Bankless", "Crypto Crew University",
+                     "Crypto Banter", "Raoul Pal", "Lyn Alden",
+                     "Lark Davis", "Wolf of All Streets"}
 
-    # Title keywords that warrant Sonnet analysis
-    SONNET_KEYWORDS = {
-        "btc", "bitcoin", "sol", "solana", "crypto", "defi", "macro", "fed",
-        "rate", "rates", "liquidity", "ai ", "artificial intelligence", "gpu",
-        "compute", "render", "hype", "jup", "jupiter", "bonk", "pump",
-        "bear", "bull", "recession", "inflation", "iran", "war", "oil",
-        "china", "tariff", "etf", "regulation", "sec", "market", "crash",
-        "rally", "bottom", "top", "cycle", "halving", "stablecoin",
-        "mstr", "microstrategy", "coinbase",
-    }
-
-    # Use Sonnet only if: priority channel AND title contains relevant keyword
-    title_lower = (video_title or "").lower()
-    title_relevant = any(kw in title_lower for kw in SONNET_KEYWORDS)
-
-    if channel_name in HIGH_PRIORITY and title_relevant:
-        model = SONNET_MODEL
-    else:
-        model = HAIKU_MODEL
-
-    log.info("Analysis model: %s for channel: %s (title_relevant=%s, title='%s')",
-             model, channel_name, title_relevant, video_title[:60] if video_title else "")
+    # Sonnet for all priority channels, Haiku for the rest. No keyword filter.
+    model = SONNET_MODEL if channel_name in HIGH_PRIORITY else HAIKU_MODEL
+    log.info("Analysis model: %s for channel: %s", model, channel_name)
     if not ANTHROPIC_API_KEY:
         log.error("ANTHROPIC_API_KEY not set — cannot analyse")
         return None
