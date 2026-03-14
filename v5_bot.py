@@ -180,6 +180,28 @@ async def cmd_sold(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Error: {e}")
 
 
+async def cmd_synthesis(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Run synthesis engine on demand."""
+    await update.message.reply_text("Running synthesis engine (15-20s)...")
+    try:
+        from synthesis import run_synthesis, format_synthesis_telegram
+        result = run_synthesis()
+        if "output" in result:
+            msg = format_synthesis_telegram(result["output"])
+            # Split if needed
+            if len(msg) > 4000:
+                await update.message.reply_text(msg[:4000], parse_mode="HTML")
+                if len(msg) > 4000:
+                    await update.message.reply_text(msg[4000:], parse_mode="HTML")
+            else:
+                await update.message.reply_text(msg, parse_mode="HTML")
+        else:
+            await update.message.reply_text("Synthesis failed: " + result.get("error", "unknown"))
+    except Exception as e:
+        log.error("/synthesis error: %s", e)
+        await update.message.reply_text("Error: " + str(e))
+
+
 async def cmd_supply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show supply flow monitor."""
     try:
@@ -366,6 +388,11 @@ def _run_scheduled():
         except Exception as e:
             log.error("Daily DeFi data failed: %s", e)
         try:
+            from synthesis import run_synthesis
+            run_synthesis(send_to_telegram=True)
+        except Exception as e:
+            log.error("Daily synthesis failed: %s", e)
+        try:
             from rec_ledger import run_log_daily
             run_log_daily()
         except Exception as e:
@@ -414,6 +441,7 @@ def main():
     app.add_handler(CommandHandler("pnl", cmd_pnl))
     app.add_handler(CommandHandler("bought", cmd_bought))
     app.add_handler(CommandHandler("sold", cmd_sold))
+    app.add_handler(CommandHandler("synthesis", cmd_synthesis))
     app.add_handler(CommandHandler("supply", cmd_supply))
     app.add_handler(CommandHandler("youtube", cmd_youtube))
     app.add_handler(CommandHandler("market", cmd_market))
