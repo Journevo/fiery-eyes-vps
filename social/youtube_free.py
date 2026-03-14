@@ -458,16 +458,36 @@ def _analyse_transcript(transcript: str, video_title: str = "", channel_name: st
                      "InvestAnswers", "Benjamin Cowen", "Coin Bureau",
                      "Bankless", "Altcoin Daily", "Crypto Crew University",
                      "Crypto Banter", "Raoul Pal", "Lyn Alden"}
-    model = SONNET_MODEL if channel_name in HIGH_PRIORITY else HAIKU_MODEL
-    log.info("Analysis model: %s for channel: %s", model, channel_name)
+
+    # Title keywords that warrant Sonnet analysis
+    SONNET_KEYWORDS = {
+        "btc", "bitcoin", "sol", "solana", "crypto", "defi", "macro", "fed",
+        "rate", "rates", "liquidity", "ai ", "artificial intelligence", "gpu",
+        "compute", "render", "hype", "jup", "jupiter", "bonk", "pump",
+        "bear", "bull", "recession", "inflation", "iran", "war", "oil",
+        "china", "tariff", "etf", "regulation", "sec", "market", "crash",
+        "rally", "bottom", "top", "cycle", "halving", "stablecoin",
+        "mstr", "microstrategy", "coinbase",
+    }
+
+    # Use Sonnet only if: priority channel AND title contains relevant keyword
+    title_lower = (video_title or "").lower()
+    title_relevant = any(kw in title_lower for kw in SONNET_KEYWORDS)
+
+    if channel_name in HIGH_PRIORITY and title_relevant:
+        model = SONNET_MODEL
+    else:
+        model = HAIKU_MODEL
+
+    log.info("Analysis model: %s for channel: %s (title_relevant=%s, title='%s')",
+             model, channel_name, title_relevant, video_title[:60] if video_title else "")
     if not ANTHROPIC_API_KEY:
         log.error("ANTHROPIC_API_KEY not set — cannot analyse")
         return None
 
-    # Sonnet channels: COMPLETE transcript, zero truncation
-    # Haiku channels: truncate to 12K chars
-    if channel_name in HIGH_PRIORITY:
-        log.info("Full transcript: %d chars for %s (Sonnet, no truncation)", len(transcript), channel_name)
+    # Sonnet: COMPLETE transcript. Haiku: truncate to 12K.
+    if model == SONNET_MODEL:
+        log.info("Full transcript: %d chars for %s (Sonnet)", len(transcript), channel_name)
     else:
         max_chars = 12000
         if len(transcript) > max_chars:
@@ -475,7 +495,7 @@ def _analyse_transcript(transcript: str, video_title: str = "", channel_name: st
             log.info("Transcript truncated to %d chars (Haiku)", max_chars)
 
     # Different prompts for different models
-    if channel_name in HIGH_PRIORITY:
+    if model == SONNET_MODEL:
         # Sonnet: analytical essay format
         prompt_text = SONNET_ANALYSIS_PROMPT.format(title=video_title, channel=channel_name) + transcript
     else:
@@ -516,7 +536,7 @@ def _analyse_transcript(transcript: str, video_title: str = "", channel_name: st
                 return None
 
             # Sonnet essay format — return as dict with summary text
-            if channel_name in HIGH_PRIORITY:
+            if model == SONNET_MODEL:
                 return {
                     "title": video_title,
                     "channel": channel_name,
