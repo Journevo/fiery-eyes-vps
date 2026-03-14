@@ -155,6 +155,18 @@ def log_daily_recommendations(prices: dict, cycle: dict, liq: dict | None):
 # ---------------------------------------------------------------------------
 # Review recommendations
 # ---------------------------------------------------------------------------
+def _fmt_price(price: float) -> str:
+    """Format price for display."""
+    if price >= 1000:
+        return f"${price:,.0f}"
+    elif price >= 1:
+        return f"${price:.2f}"
+    elif price >= 0.001:
+        return f"${price:.4f}"
+    else:
+        return f"${price:.2e}"
+
+
 def _get_current_price(token: str) -> float | None:
     """Get current price from CoinGecko for comparison."""
     cg_ids = {
@@ -253,7 +265,7 @@ def format_recent_recs_telegram(limit: int = 10) -> str:
 
     lines = [f"📒 <b>LAST {limit} RECOMMENDATIONS</b>", ""]
     for date, token, action, price, conviction in rows:
-        lines.append(f"{date} | {action:<9s} {token:<6s} ${price:.4f} [{conviction}]")
+        lines.append(f"{date} | {action:<9s} {token:<6s} {_fmt_price(price)} [{conviction}]")
 
     return "\n".join(lines)
 

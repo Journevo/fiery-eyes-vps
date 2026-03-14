@@ -125,10 +125,16 @@ def fetch_global_m2() -> float | None:
 
 
 def fetch_dxy() -> float | None:
-    """Fetch DXY (US Dollar Index) from FRED."""
-    dxy = fetch_fred_series("DTWEXBGS")  # Broad trade-weighted USD index
-    if dxy is not None:
-        return round(dxy, 1)
+    """Fetch DXY (US Dollar Index) via yfinance."""
+    try:
+        import yfinance as yf
+        dx = yf.Ticker("DX-Y.NYB")
+        price = dx.info.get("regularMarketPrice") or dx.info.get("previousClose")
+        if price:
+            log.info("DXY: %.1f", price)
+            return round(float(price), 1)
+    except Exception as e:
+        log.error("DXY fetch failed: %s", e)
     return None
 
 
@@ -280,7 +286,7 @@ def format_liquidity_telegram(data: dict) -> str:
     """Format liquidity data for Telegram (HTML parse mode)."""
     us_dir = "↗" if data.get("fred_slope", 0) > 0.05 else ("↘" if data.get("fred_slope", 0) < -0.05 else "→")
     m2_val = data.get("global_m2")
-    m2_str = f"${m2_val:.0f}T" if m2_val else "N/A"
+    m2_str = f"US ${m2_val:.1f}T" if m2_val else "N/A"
     dxy_val = data.get("dxy")
     dxy_str = f"{dxy_val:.0f}" if dxy_val else "N/A"
 

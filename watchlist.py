@@ -24,8 +24,12 @@ TOKENS = {
     "HYPE": {"cg_id": "hyperliquid", "ath": 59},
     "RENDER": {"cg_id": "render-token", "ath": 13.59},
     "BONK": {"cg_id": "bonk", "ath": 0.000059},
-    "MSTR": {"cg_id": "microstrategy", "ath": 457},
-    "COIN": {"cg_id": "coinbase-global-inc", "ath": 238},
+}
+
+# Stock tickers fetched via yfinance (not on CoinGecko)
+STOCK_TOKENS = {
+    "MSTR": {"ticker": "MSTR", "ath": 457},
+    "COIN": {"ticker": "COIN", "ath": 238},
 }
 
 # MSTR mNAV calculation constants
@@ -124,7 +128,36 @@ def fetch_prices() -> dict:
                 "mcap": mcap,
             }
 
-        log.info("Fetched prices for %d/%d tokens", len(results), len(TOKENS))
+        log.info("Fetched prices for %d/%d crypto tokens", len(results), len(TOKENS))
+
+        # Fetch stock tokens via yfinance
+        try:
+            import yfinance as yf
+            for symbol, cfg in STOCK_TOKENS.items():
+                try:
+                    stock = yf.Ticker(cfg["ticker"])
+                    price = stock.info.get("regularMarketPrice") or stock.info.get("previousClose")
+                    if price:
+                        ath = cfg["ath"]
+                        pct_from_ath = round((price - ath) / ath * 100, 1)
+                        zone = classify_zone(pct_from_ath)
+                        mcap = stock.info.get("marketCap")
+                        results[symbol] = {
+                            "price": float(price),
+                            "ath": ath,
+                            "pct_from_ath": pct_from_ath,
+                            "zone": zone,
+                            "change_24h": None,
+                            "change_7d": None,
+                            "mcap": float(mcap) if mcap else None,
+                        }
+                        log.info("Stock %s: $%.2f (%.1f%% ATH)", symbol, price, pct_from_ath)
+                except Exception as e:
+                    log.warning("yfinance failed for %s: %s", symbol, e)
+        except ImportError:
+            log.warning("yfinance not installed — skipping stock tokens")
+
+        log.info("Total watchlist: %d tokens", len(results))
         return results
 
     except Exception as e:
