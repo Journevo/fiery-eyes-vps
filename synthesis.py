@@ -105,6 +105,22 @@ def collect_all_layers() -> dict:
     except Exception as e:
         log.error("YouTube intel failed: %s", e)
 
+    # SunFlow whale conviction
+    try:
+        sf_rows = execute("""
+            SELECT token, conviction_score, net_flow_usd, timeframes_present, timeframe_list
+            FROM sunflow_conviction WHERE is_watchlist = TRUE
+            ORDER BY conviction_score DESC
+        """, fetch=True)
+        if sf_rows:
+            layers["sunflow"] = [
+                {"token": r[0], "conviction": r[1], "net_flow": r[2],
+                 "timeframes": r[3], "tf_list": r[4]}
+                for r in sf_rows
+            ]
+    except Exception as e:
+        log.error("SunFlow data failed: %s", e)
+
     # On-chain large swaps (last 24h)
     try:
         swaps = execute("""
@@ -221,6 +237,13 @@ def build_synthesis_prompt(layers: dict) -> str:
             for c in yt["convergence"]:
                 sections.append(f"YT CONVERGENCE: ${c['symbol']} — {c['count']} channels bullish")
 
+    # SunFlow whale conviction
+    sf = layers.get("sunflow", [])
+    if sf:
+        sf_lines = [f"{s['token']}: conviction {s['conviction']}, {s['timeframes']}/4 timeframes ({s['tf_list']}), net flow ${s['net_flow']:,.0f}"
+                    for s in sf if s.get('net_flow')]
+        sections.append("SUNFLOW WHALE CONVICTION (most important signal): " + " | ".join(sf_lines))
+
     # Large swaps
     swaps = layers.get("large_swaps", [])
     if swaps:
@@ -229,6 +252,16 @@ def build_synthesis_prompt(layers: dict) -> str:
         sections.append("LARGE SWAPS (24h): " + " | ".join(swap_lines))
 
     data_block = "\n\n".join(sections)
+
+    # Get cycle data for constraints
+    bear_pct = 42  # default
+    deploy_pct = "40-50%"
+    try:
+        btc = layers.get("btc_cycle", {})
+        bear_pct = btc.get("bear_progress_pct", 42)
+        deploy_pct = "40-50%" if bear_pct < 60 else "60-70%"
+    except Exception:
+        pass
 
     prompt = f"""You are a senior crypto research analyst writing a morning briefing. Your reader holds positions in JUP, HYPE, RENDER, BONK on Solana, with BTC/SOL as benchmarks. They have 50%+ dry powder in USDC.
 
@@ -255,9 +288,15 @@ Specific actions mapped to the watchlist. For each relevant token:
 4. OPPORTUNITIES & RISKS
 What is the market not seeing? Where is the asymmetric bet? What is the biggest risk to the portfolio right now?
 
-CRITICAL: Be opinionated. "Both sides have merit" is useless. Take a position based on the data and explain why. If RENDER has conviction 9 from whales, SAY it's the best opportunity and explain the risk that makes you wrong.
+CRITICAL CONSTRAINTS:
+- CYCLE GATE: Bear is {bear_pct:.0f}% done. Max deployment is {deploy_pct}%. NEVER recommend "aggressive" buying when bear <60%. Use "DCA slowly" and "keep dry powder".
+- SUNFLOW DATA MATTERS MOST: If a token has conviction 9 on SunFlow (3/4 timeframes, $14M+ inflows), that outweighs everything else. Use this data.
+- EVERY recommendation needs the BEAR CASE: "ACCUMULATE X slowly — [bull reason], but [specific risk]. DCA, don't lump sum."
+- NO HYPERBOLIC LANGUAGE: No "generational", "explosive", "moonshot". Sound like a cautious research analyst, not crypto Twitter. Measured, both-sides.
+- RENDER vs HYPE: Check SunFlow conviction scores. If RENDER has higher whale conviction than HYPE, rank RENDER higher regardless of HYPE's revenue.
+- Be specific about entry levels and position sizing. "Below $1.65" not "on weakness".
 
-Keep total output under 600 words. No headers with asterisks — use the section names above as plain text headers."""
+Keep total output under 600 words. Use plain text section headers (no ** markdown)."""
 
     return prompt
 
@@ -321,36 +360,38 @@ def call_synthesis(prompt: str) -> dict:
 # ---------------------------------------------------------------------------
 def format_synthesis_telegram(output: str) -> str:
     """Format synthesis output for Telegram."""
-    # Add header and trim if needed
-    msg = f"🧠 <b>SYNTHESIS ENGINE</b>\n\n{output}"
-
-    # Telegram limit is 4096 chars
-    if len(msg) > 4000:
-        msg = msg[:3997] + "..."
-
-    return msg
+    return f"\U0001f9e0 <b>SYNTHESIS ENGINE</b>\n\n{output}"
 
 
 def send_telegram(text: str):
+    """Send to Telegram, splitting at paragraphs if needed."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return
-    try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        resp = requests.post(url, json={
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": text,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": True,
-        }, timeout=15)
-        if resp.status_code != 200:
-            log.error("Telegram failed: %s", resp.text)
-    except Exception as e:
-        log.error("Telegram error: %s", e)
+    max_len = 4000
+    if len(text) <= max_len:
+        chunks = [text]
+    else:
+        chunks = []
+        current = ""
+        for para in text.split("\n\n"):
+            if current and len(current) + len(para) + 2 > max_len:
+                chunks.append(current)
+                current = ""
+            current = current + "\n\n" + para if current else para
+        if current:
+            chunks.append(current)
+    for chunk in chunks:
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+            resp = requests.post(url, json={
+                "chat_id": TELEGRAM_CHAT_ID, "text": chunk,
+                "parse_mode": "HTML", "disable_web_page_preview": True,
+            }, timeout=15)
+            if resp.status_code != 200:
+                log.error("Telegram failed: %s", resp.text)
+        except Exception as e:
+            log.error("Telegram error: %s", e)
 
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 def run_synthesis(send_to_telegram: bool = False) -> dict:
     """Run the full synthesis pipeline."""
     ensure_table()

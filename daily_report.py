@@ -507,37 +507,28 @@ def generate_report(send_to_telegram: bool = False) -> str:
 
 
 def send_telegram(text: str):
-    """Send report to Telegram, splitting if needed (4096 char limit)."""
+    """Send report to Telegram, splitting at sections then paragraphs."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return
-
-    # Split into chunks if too long
     max_len = 4000
-    chunks = []
     if len(text) <= max_len:
         chunks = [text]
     else:
-        # Split at section boundaries
-        parts = text.split("\n━━━")
-        current = parts[0]
-        for part in parts[1:]:
-            candidate = current + "\n━━━" + part
-            if len(candidate) > max_len:
+        chunks = []
+        current = ""
+        for para in text.split("\n\n"):
+            if current and len(current) + len(para) + 2 > max_len:
                 chunks.append(current)
-                current = "━━━" + part
-            else:
-                current = candidate
+                current = ""
+            current = current + "\n\n" + para if current else para
         if current:
             chunks.append(current)
-
     for chunk in chunks:
         try:
             url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
             resp = requests.post(url, json={
-                "chat_id": TELEGRAM_CHAT_ID,
-                "text": chunk,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True,
+                "chat_id": TELEGRAM_CHAT_ID, "text": chunk,
+                "parse_mode": "HTML", "disable_web_page_preview": True,
             }, timeout=15)
             if resp.status_code == 200:
                 log.info("Telegram chunk sent (%d chars)", len(chunk))
@@ -545,7 +536,6 @@ def send_telegram(text: str):
                 log.error("Telegram send failed: %s %s", resp.status_code, resp.text)
         except Exception as e:
             log.error("Telegram error: %s", e)
-
 
 if __name__ == "__main__":
     import sys
