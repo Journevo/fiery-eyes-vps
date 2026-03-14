@@ -63,6 +63,10 @@ CRITICAL RULES:
 - "Bullish on BTC" is USELESS. "Sacks: BTC to $90K by June, resilient as digital gold during Iran crisis" is USEFUL
 - portfolio_impact must reference our specific watchlist tokens
 
+CRITICAL: This transcript may cover MULTIPLE segments/topics. Extract insights from EVERY segment — not just the first topic. If the title mentions "AI Revenue" and "Iran War", BOTH must appear in your analysis.
+
+For AI/tech segments: extract specific revenue numbers, company names, growth rates, compute/GPU demand data. Map to our watchlist — AI compute demand = bullish RENDER.
+
 Respond ONLY in valid JSON (no markdown, no code fences). If a field has no data, use null or [].
 
 Transcript:
@@ -418,10 +422,28 @@ def _analyse_transcript(transcript: str, video_title: str = "", channel_name: st
         log.error("ANTHROPIC_API_KEY not set — cannot analyse")
         return None
 
-    # Truncate transcripts — leave room for structured output
-    max_chars = 10000
+    # Truncate transcripts based on model
+    # Sonnet: 200K context, can handle 40K chars (~10K tokens) comfortably
+    # Haiku: smaller context, limit to 12K chars
+    if channel_name in HIGH_PRIORITY:
+        max_chars = 40000  # Sonnet — send most of the transcript
+    else:
+        max_chars = 12000  # Haiku — keep it shorter
     if len(transcript) > max_chars:
-        transcript = transcript[:8000] + "\n[...TRUNCATED...]\n" + transcript[-2000:]
+        # Keep proportional sections to cover all segments
+        # First 60% + last 20% + middle sample
+        first_chunk = int(max_chars * 0.55)
+        last_chunk = int(max_chars * 0.25)
+        mid_start = len(transcript) // 3
+        mid_chunk = max_chars - first_chunk - last_chunk - 50
+        transcript = (
+            transcript[:first_chunk]
+            + "\n\n[...SEGMENT BREAK...]\n\n"
+            + transcript[mid_start:mid_start + mid_chunk]
+            + "\n\n[...SEGMENT BREAK...]\n\n"
+            + transcript[-last_chunk:]
+        )
+        log.info("Transcript truncated: %d → %d chars (model: %s)", len(transcript), max_chars, model)
 
     prompt_text = ANALYSIS_PROMPT + transcript
     if video_title:
