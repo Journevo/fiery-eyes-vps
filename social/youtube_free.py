@@ -415,35 +415,25 @@ def _analyse_transcript(transcript: str, video_title: str = "", channel_name: st
     Uses Sonnet for high-priority channels, Haiku for the rest."""
     # High-priority channels get Sonnet for better extraction
     HIGH_PRIORITY = {"All-In Podcast", "Real Vision", "Real Vision Finance",
-                     "Benjamin Cowen", "Raoul Pal", "Lyn Alden"}
+                     "InvestAnswers", "Benjamin Cowen", "Coin Bureau",
+                     "Bankless", "Altcoin Daily", "Crypto Crew University",
+                     "Crypto Banter", "Raoul Pal", "Lyn Alden"}
     model = SONNET_MODEL if channel_name in HIGH_PRIORITY else HAIKU_MODEL
     log.info("Analysis model: %s for channel: %s", model, channel_name)
     if not ANTHROPIC_API_KEY:
         log.error("ANTHROPIC_API_KEY not set — cannot analyse")
         return None
 
-    # Truncate transcripts based on model
-    # Sonnet: 200K context, can handle 40K chars (~10K tokens) comfortably
-    # Haiku: smaller context, limit to 12K chars
+    # Sonnet channels: send FULL transcript (200K context handles it)
+    # Haiku channels: truncate to 12K chars
     if channel_name in HIGH_PRIORITY:
-        max_chars = 40000  # Sonnet — send most of the transcript
+        # No truncation — send everything. Cost ~$0.30-0.50/video, worth it.
+        log.info("Full transcript: %d chars for %s (Sonnet)", len(transcript), channel_name)
     else:
-        max_chars = 12000  # Haiku — keep it shorter
-    if len(transcript) > max_chars:
-        # Keep proportional sections to cover all segments
-        # First 60% + last 20% + middle sample
-        first_chunk = int(max_chars * 0.55)
-        last_chunk = int(max_chars * 0.25)
-        mid_start = len(transcript) // 3
-        mid_chunk = max_chars - first_chunk - last_chunk - 50
-        transcript = (
-            transcript[:first_chunk]
-            + "\n\n[...SEGMENT BREAK...]\n\n"
-            + transcript[mid_start:mid_start + mid_chunk]
-            + "\n\n[...SEGMENT BREAK...]\n\n"
-            + transcript[-last_chunk:]
-        )
-        log.info("Transcript truncated: %d → %d chars (model: %s)", len(transcript), max_chars, model)
+        max_chars = 12000
+        if len(transcript) > max_chars:
+            transcript = transcript[:10000] + "\n[...TRUNCATED...]\n" + transcript[-2000:]
+            log.info("Transcript truncated to %d chars (Haiku)", max_chars)
 
     prompt_text = ANALYSIS_PROMPT + transcript
     if video_title:

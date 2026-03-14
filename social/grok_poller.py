@@ -378,8 +378,8 @@ def _store_signal(handle: str, tweet_id: str, tweet_text: str,
 
 
 # v5.1 watchlist tokens — only these get immediate alerts (unless huge)
-_WATCHLIST_SYMBOLS = {"JUP", "HYPE", "RENDER", "BONK", "SOL", "BTC", "PUMP", "PENGU", "FARTCOIN"}
-_ALERT_MIN_USD_NON_WATCHLIST = 5_000_000  # $5M minimum for non-watchlist alerts
+_WATCHLIST_SYMBOLS = {"JUP", "HYPE", "RENDER", "BONK", "SOL", "BTC", "PUMP", "PENGU", "FARTCOIN", "USELESS"}
+_ALERT_MIN_USD_NON_WATCHLIST = 50_000_000  # $50M minimum for non-watchlist alerts
 
 
 def _route_signal_alert(handle: str, parsed: dict, tweet_text: str):
@@ -395,6 +395,11 @@ def _route_signal_alert(handle: str, parsed: dict, tweet_text: str):
     symbol = parsed.get("token_symbol") or "?"
     amount = parsed.get("amount_usd") or 0
 
+    # Suppress unknown tokens entirely
+    if symbol == "?" or symbol is None:
+        log.debug("Suppressed alert: unknown token from @%s", handle)
+        return
+
     # Decide whether to send a Telegram alert
     is_watchlist = symbol.upper() in _WATCHLIST_SYMBOLS if symbol != "?" else False
     is_large = amount >= _ALERT_MIN_USD_NON_WATCHLIST
@@ -405,6 +410,14 @@ def _route_signal_alert(handle: str, parsed: dict, tweet_text: str):
                   handle, parsed_type, symbol, strength, amount)
         return
 
+    # v5.1: ALL signals logged to DB only. NO individual Telegram alerts.
+    # Smart money surfaces in daily report consolidated section.
+    # Only exception: genuine convergence (3+ sources, handled separately)
+    log.debug("Signal logged (no alert): @%s %s $%s [%s] $%.0f",
+              handle, parsed_type, symbol, strength, amount)
+    return
+
+    # --- BELOW IS DISABLED — kept for reference ---
     try:
         from telegram_bot.severity import route_alert
 

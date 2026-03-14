@@ -54,8 +54,32 @@ def generate_report(send_to_telegram: bool = False) -> str:
     today = datetime.now(timezone.utc)
     date_str = today.strftime("%b %-d %Y")
 
+    # Fetch BTC price early for TLDR + Nimbus
+    btc_price = fetch_btc_price()
+    cycle = calculate_cycle(btc_price, today.date()) if btc_price else None
+
     sections = []
-    sections.append(f"🌙 <b>FIERY EYES — {date_str}</b>\n")
+    sections.append(f"🌙 <b>FIERY EYES — {date_str}</b>")
+
+
+    # TLDR
+    try:
+        if btc_price and cycle:
+            fg_val = None
+            try:
+                from market_structure import fetch_fear_greed
+                fg_val = fetch_fear_greed().get("value")
+            except Exception:
+                pass
+            bear = cycle["bear_progress_pct"]
+            t = f"Bear {bear:.0f}% done"
+            if fg_val and fg_val <= 25:
+                t = f"Extreme fear ({fg_val}) + {t.lower()}"
+            t += ". Accumulate slowly, keep 50%+ dry powder." if bear < 60 else ". Approaching bottom."
+            sections.append(f"<i>{t}</i>\n")
+    except Exception:
+        pass
+
 
     # ━━━ NIMBUS STALENESS ━━━
     try:
@@ -68,9 +92,7 @@ def generate_report(send_to_telegram: bool = False) -> str:
         log.error("Nimbus check failed: %s", e)
 
     # ━━━ BTC CYCLE ━━━
-    btc_price = fetch_btc_price()
-    if btc_price:
-        cycle = calculate_cycle(btc_price, today.date())
+    if btc_price and cycle:
         bar = _progress_bar(cycle["bear_progress_pct"])
         scenarios_str = " | ".join(
             f"-{s['drawdown_pct']}% = ${s['target_price']:,}" for s in SCENARIOS
@@ -102,9 +124,27 @@ def generate_report(send_to_telegram: bool = False) -> str:
             streak_str = f" ({streak:.0f}d {streak_dir})" if streak >= 2 else ""
             fg_str = f"{fg['value']} ({fg.get('label', '')})" if fg.get("value") is not None else "N/A"
 
+            # Context annotations
+            fg_context = ""
+            fg_v = fg.get("value", 50)
+            if fg_v <= 20:
+                fg_context = " \u2014 bottom 5% historically, contrarian BULLISH \u2705"
+            elif fg_v <= 30:
+                fg_context = " \u2014 fear zone, accumulation territory \u2705"
+            elif fg_v >= 80:
+                fg_context = " \u2014 extreme greed, take profit territory \U0001f534"
+
+            fund_context = ""
+            streak_d = funding.get("streak_days", 0)
+            if funding.get("streak_direction") == "negative" and streak_d >= 10:
+                fund_context = " \u2014 local bottom signal \U0001f525"
+            elif funding.get("streak_direction") == "negative" and streak_d >= 5:
+                fund_context = " \u2014 shorts dominant \u2705"
+
             sections.append(
                 f"\n━━━ <b>MARKET STRUCTURE</b> ━━━\n"
-                f"OI: {oi_str} | Fund: {rate_str}{streak_str} | F&G: {fg_str}"
+                f"OI: {oi_str} | Fund: {rate_str}{streak_str}{fund_context}\n"
+                f"F&G: {fg_str}{fg_context}"
             )
 
             for insight in mkt.get("insights", []):
@@ -277,6 +317,59 @@ def generate_report(send_to_telegram: bool = False) -> str:
             sections.append("\n━━━ <b>DRY POWDER</b> ━━━\n" + yield_line)
     except Exception as e:
         log.error("Dry powder section failed: %s", e)
+
+    # ━━━ SMART MONEY (24h) ━━━
+    try:
+        watchlist_tokens = {"JUP", "HYPE", "RENDER", "BONK", "SOL", "PUMP", "PENGU", "FARTCOIN"}
+        # Get X signals per watchlist token
+        sm_rows = execute("""
+            SELECT token_symbol,
+                   COUNT(*) as signal_count,
+                   COUNT(DISTINCT source_handle) as source_count,
+                   array_agg(DISTINCT source_handle) as sources,
+                   MAX(signal_strength) as max_strength,
+                   array_agg(DISTINCT parsed_type) as types
+            FROM x_intelligence
+            WHERE detected_at > NOW() - INTERVAL '24 hours'
+              AND token_symbol IS NOT NULL
+              AND signal_strength IN ('medium', 'strong')
+            GROUP BY token_symbol
+            ORDER BY COUNT(DISTINCT source_handle) DESC, COUNT(*) DESC
+        """, fetch=True)
+
+        sm_lines = []
+        for token, count, sources, source_list, strength, types in (sm_rows or []):
+            if not token:
+                continue
+            tok = token.upper()
+            is_wl = tok in watchlist_tokens
+            if not is_wl:
+                continue  # Only watchlist tokens in daily report
+
+            # Determine emoji verdict
+            if sources >= 3:
+                emoji = "\U0001f7e2"  # green
+                verdict = "STRONG"
+            elif sources >= 2:
+                emoji = "\U0001f7e1"  # yellow
+                verdict = "WATCHING"
+            elif strength == "strong":
+                emoji = "\U0001f7e1"
+                verdict = "WATCHING"
+            else:
+                emoji = "\u26aa"  # white
+                verdict = "QUIET"
+
+            # Format sources and signal types
+            src_str = ", ".join((s or "").lstrip("@")[:15] for s in (source_list or [])[:3])
+            type_str = ", ".join((t or "") for t in (types or [])[:2])
+
+            sm_lines.append(f"  {emoji} {tok}: {sources} src ({src_str}) \u2014 {verdict}")
+
+        if sm_lines:
+            sections.append("\n━━━ <b>SMART MONEY (24h)</b> ━━━\n" + "\n".join(sm_lines[:8]))
+    except Exception as e:
+        log.error("Smart money section failed: %s", e)
 
     # ━━━ REGIME ━━━
     bear_pct = cycle["bear_progress_pct"] if btc_price else 0
