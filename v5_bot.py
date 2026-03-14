@@ -180,6 +180,19 @@ async def cmd_sold(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Error: {e}")
 
 
+async def cmd_chains(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show cross-chain scorecard."""
+    try:
+        from cross_chain import run_cross_chain, format_cross_chain_telegram
+        result = run_cross_chain()
+        await update.message.reply_text(
+            format_cross_chain_telegram(result["data"], result["alerts"]),
+            parse_mode="HTML")
+    except Exception as e:
+        log.error("/chains error: %s", e)
+        await update.message.reply_text("Error: " + str(e))
+
+
 async def cmd_synthesis(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Run synthesis engine on demand."""
     await update.message.reply_text("Running synthesis engine (15-20s)...")
@@ -403,6 +416,16 @@ def _run_scheduled():
     schedule.every(2).hours.do(job_grok_medium)
     schedule.every(2).hours.do(job_youtube)
     schedule.every(4).hours.do(job_4h)
+    def job_weekly():
+        """Weekly: cross-chain monitoring."""
+        log.info("Running weekly cross-chain")
+        try:
+            from cross_chain import run_cross_chain
+            run_cross_chain(send_to_telegram=True)
+        except Exception as e:
+            log.error("Weekly cross-chain failed: %s", e)
+
+    schedule.every().sunday.at("08:00").do(job_weekly)
     schedule.every().day.at("00:00").do(job_daily)
 
     # Run watchlist + first Grok poll on startup
@@ -441,6 +464,7 @@ def main():
     app.add_handler(CommandHandler("pnl", cmd_pnl))
     app.add_handler(CommandHandler("bought", cmd_bought))
     app.add_handler(CommandHandler("sold", cmd_sold))
+    app.add_handler(CommandHandler("chains", cmd_chains))
     app.add_handler(CommandHandler("synthesis", cmd_synthesis))
     app.add_handler(CommandHandler("supply", cmd_supply))
     app.add_handler(CommandHandler("youtube", cmd_youtube))
