@@ -180,6 +180,16 @@ async def cmd_sold(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Error: {e}")
 
 
+async def cmd_sunflow(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show SunFlow whale conviction scores."""
+    try:
+        from sunflow_telegram import get_conviction_summary
+        await update.message.reply_text(get_conviction_summary(), parse_mode="HTML")
+    except Exception as e:
+        log.error("/sunflow error: %s", e)
+        await update.message.reply_text("Error: " + str(e))
+
+
 async def cmd_exits(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Check exit alert status for all positions."""
     try:
@@ -546,6 +556,18 @@ def main():
 
     log.info("Starting Fiery Eyes v5.1 bot...")
 
+    # Start SunFlow Telegram listener in background thread
+    def _run_sunflow():
+        try:
+            from sunflow_telegram import run_listener
+            log.info("Starting SunFlow Telegram listener...")
+            run_listener()
+        except Exception as e:
+            log.error("SunFlow listener failed: %s", e)
+
+    sunflow_thread = threading.Thread(target=_run_sunflow, daemon=True)
+    sunflow_thread.start()
+
     # Start scheduler in background thread
     scheduler_thread = threading.Thread(target=_run_scheduled, daemon=True)
     scheduler_thread.start()
@@ -562,6 +584,7 @@ def main():
     app.add_handler(CommandHandler("pnl", cmd_pnl))
     app.add_handler(CommandHandler("bought", cmd_bought))
     app.add_handler(CommandHandler("sold", cmd_sold))
+    app.add_handler(CommandHandler("sunflow", cmd_sunflow))
     app.add_handler(CommandHandler("exits", cmd_exits))
     app.add_handler(CommandHandler("yields", cmd_yields))
     app.add_handler(CommandHandler("scores", cmd_scores))

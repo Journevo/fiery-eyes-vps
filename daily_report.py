@@ -245,6 +245,15 @@ def generate_report(send_to_telegram: bool = False) -> str:
     except Exception as e:
         log.error("Supply flow section failed: %s", e)
 
+    # ━━━ SUNFLOW WHALE ━━━
+    try:
+        from sunflow_telegram import format_for_report
+        sf_report = format_for_report()
+        if sf_report:
+            sections.append("\n━━━ <b>SUNFLOW WHALE</b> ━━━\n" + sf_report)
+    except Exception as e:
+        log.error("SunFlow section failed: %s", e)
+
     # ━━━ YOUTUBE ━━━
     try:
         from youtube_intel import get_recent_youtube_intel, format_youtube_for_report
