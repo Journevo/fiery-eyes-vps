@@ -73,6 +73,33 @@ def generate_report(send_to_telegram: bool = False) -> str:
     else:
         sections.append("━━━ <b>BTC CYCLE</b> ━━━\n⚠️ BTC price unavailable")
 
+    # ━━━ MARKET STRUCTURE ━━━
+    try:
+        from market_structure import run_market_structure
+        mkt = run_market_structure()
+        if mkt:
+            oi = mkt.get("oi", {})
+            funding = mkt.get("funding", {})
+            ls = mkt.get("long_short", {})
+            fg = mkt.get("fear_greed", {})
+
+            oi_str = f"${oi['oi_usd']/1e9:.1f}B" if oi.get("oi_usd") else "N/A"
+            rate_str = f"{funding['current_pct']:+.4f}%" if funding.get("current_pct") is not None else "N/A"
+            streak = funding.get("streak_days", 0)
+            streak_dir = funding.get("streak_direction", "")
+            streak_str = f" ({streak:.0f}d {streak_dir})" if streak >= 2 else ""
+            fg_str = f"{fg['value']} ({fg.get('label', '')})" if fg.get("value") is not None else "N/A"
+
+            sections.append(
+                f"\n━━━ <b>MARKET STRUCTURE</b> ━━━\n"
+                f"OI: {oi_str} | Fund: {rate_str}{streak_str} | F&G: {fg_str}"
+            )
+
+            for insight in mkt.get("insights", []):
+                sections.append(insight)
+    except Exception as e:
+        log.error("Market structure section failed: %s", e)
+
     # ━━━ LIQUIDITY ━━━
     liq = run_liquidity_tracker()
     if liq and liq.get("us_net_liq"):

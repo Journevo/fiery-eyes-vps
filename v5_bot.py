@@ -180,6 +180,20 @@ async def cmd_sold(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Error: {e}")
 
 
+async def cmd_market(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show market structure (OI, funding, L/S, F&G)."""
+    try:
+        from market_structure import run_market_structure, format_market_structure_telegram
+        data = run_market_structure()
+        if data:
+            await update.message.reply_text(format_market_structure_telegram(data), parse_mode="HTML")
+        else:
+            await update.message.reply_text("Market structure data unavailable")
+    except Exception as e:
+        log.error("/market error: %s", e)
+        await update.message.reply_text("Error: " + str(e))
+
+
 async def cmd_defi(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show DeFiLlama market data."""
     await update.message.reply_text("Fetching DeFi data...")
@@ -271,6 +285,13 @@ def _run_scheduled():
             run_swap_detection(send_to_telegram=True)
         except Exception as e:
             log.error("4h swap detection failed: %s", e)
+        try:
+            from market_structure import run_market_structure
+            run_market_structure()
+        except Exception as e:
+            log.error("4h market structure failed: %s", e)
+        except Exception as e:
+            log.error("4h swap detection failed: %s", e)
 
     def job_grok_high():
         """Every 30 min: poll Tier 1 specialized + HIGH generic accounts."""
@@ -359,6 +380,7 @@ def main():
     app.add_handler(CommandHandler("pnl", cmd_pnl))
     app.add_handler(CommandHandler("bought", cmd_bought))
     app.add_handler(CommandHandler("sold", cmd_sold))
+    app.add_handler(CommandHandler("market", cmd_market))
     app.add_handler(CommandHandler("defi", cmd_defi))
     app.add_handler(CommandHandler("signals", cmd_signals))
     app.add_handler(CommandHandler("convergence", cmd_convergence))
