@@ -180,6 +180,19 @@ async def cmd_sold(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Error: {e}")
 
 
+async def cmd_exits(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Check exit alert status for all positions."""
+    try:
+        from exit_alerts import run_exit_check, format_exit_status_telegram
+        result = run_exit_check()
+        await update.message.reply_text(
+            format_exit_status_telegram(result["positions"], result["alerts"], result["circuit_breaker"]),
+            parse_mode="HTML")
+    except Exception as e:
+        log.error("/exits error: %s", e)
+        await update.message.reply_text("Error: " + str(e))
+
+
 async def cmd_yields(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show USDC yield opportunities."""
     try:
@@ -393,6 +406,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/portfolio — positions vs targets\n"
         "/pnl — unrealised PnL\n\n"
         "<b>Research:</b>\n"
+        "/exits \u2014 stop loss / take profit status\n"
         "/yields \u2014 USDC yield opportunities\n"
         "/scores \u2014 auto-updated token scores\n"
         "/deepdive CA \u2014 full token analysis\n"
@@ -548,6 +562,7 @@ def main():
     app.add_handler(CommandHandler("pnl", cmd_pnl))
     app.add_handler(CommandHandler("bought", cmd_bought))
     app.add_handler(CommandHandler("sold", cmd_sold))
+    app.add_handler(CommandHandler("exits", cmd_exits))
     app.add_handler(CommandHandler("yields", cmd_yields))
     app.add_handler(CommandHandler("scores", cmd_scores))
     app.add_handler(CommandHandler("deepdive", cmd_deepdive))
