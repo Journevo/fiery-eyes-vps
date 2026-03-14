@@ -180,6 +180,32 @@ async def cmd_sold(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Error: {e}")
 
 
+async def cmd_pulse(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show 4h pulse — lightweight summary."""
+    try:
+        from outputs import generate_pulse
+        await update.message.reply_text(generate_pulse(), parse_mode="HTML")
+    except Exception as e:
+        log.error("/pulse error: %s", e)
+        await update.message.reply_text("Error: " + str(e))
+
+
+async def cmd_weekly(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show weekly review — performance + accuracy."""
+    await update.message.reply_text("Generating weekly review...")
+    try:
+        from outputs import generate_weekly_review, send_telegram, _split_message
+        msg = generate_weekly_review()
+        if len(msg) > 4000:
+            for chunk in _split_message(msg):
+                await update.message.reply_text(chunk, parse_mode="HTML")
+        else:
+            await update.message.reply_text(msg, parse_mode="HTML")
+    except Exception as e:
+        log.error("/weekly error: %s", e)
+        await update.message.reply_text("Error: " + str(e))
+
+
 async def cmd_chains(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show cross-chain scorecard."""
     try:
@@ -332,8 +358,8 @@ def _run_scheduled():
     log.info("Scheduler thread started")
 
     def job_4h():
-        """Every 4 hours: update watchlist, check for swaps."""
-        log.info("Running 4h job: watchlist + swap detection")
+        """Every 4 hours: update watchlist, check for swaps, send pulse."""
+        log.info("Running 4h job: watchlist + swap detection + pulse")
         try:
             from watchlist import run_watchlist
             run_watchlist(send_to_telegram=False)
@@ -417,13 +443,13 @@ def _run_scheduled():
     schedule.every(2).hours.do(job_youtube)
     schedule.every(4).hours.do(job_4h)
     def job_weekly():
-        """Weekly: cross-chain monitoring."""
-        log.info("Running weekly cross-chain")
+        """Weekly: cross-chain + full review."""
+        log.info("Running weekly review")
         try:
-            from cross_chain import run_cross_chain
-            run_cross_chain(send_to_telegram=True)
+            from outputs import send_weekly
+            send_weekly()
         except Exception as e:
-            log.error("Weekly cross-chain failed: %s", e)
+            log.error("Weekly review failed: %s", e)
 
     schedule.every().sunday.at("08:00").do(job_weekly)
     schedule.every().day.at("00:00").do(job_daily)
@@ -464,6 +490,8 @@ def main():
     app.add_handler(CommandHandler("pnl", cmd_pnl))
     app.add_handler(CommandHandler("bought", cmd_bought))
     app.add_handler(CommandHandler("sold", cmd_sold))
+    app.add_handler(CommandHandler("pulse", cmd_pulse))
+    app.add_handler(CommandHandler("weekly", cmd_weekly))
     app.add_handler(CommandHandler("chains", cmd_chains))
     app.add_handler(CommandHandler("synthesis", cmd_synthesis))
     app.add_handler(CommandHandler("supply", cmd_supply))
