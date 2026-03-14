@@ -180,6 +180,32 @@ async def cmd_sold(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Error: {e}")
 
 
+async def cmd_deepdive(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Deep dive a token: /deepdive <contract_address>"""
+    try:
+        args = context.args
+        if not args:
+            await update.message.reply_text("Usage: /deepdive <contract_address>\nExample: /deepdive JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN")
+            return
+        address = args[0]
+        if len(address) < 20:
+            await update.message.reply_text("Invalid address — need full Solana contract address")
+            return
+        await update.message.reply_text(f"Diving into <code>{address[:20]}...</code> (10-15s)", parse_mode="HTML")
+        from deepdive import run_deepdive, format_deepdive_telegram
+        result = run_deepdive(address)
+        msg = format_deepdive_telegram(result)
+        if len(msg) > 4000:
+            await update.message.reply_text(msg[:4000], parse_mode="HTML")
+            if len(msg) > 4000:
+                await update.message.reply_text(msg[4000:], parse_mode="HTML")
+        else:
+            await update.message.reply_text(msg, parse_mode="HTML")
+    except Exception as e:
+        log.error("/deepdive error: %s", e)
+        await update.message.reply_text("Error: " + str(e))
+
+
 async def cmd_pulse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show 4h pulse — lightweight summary."""
     try:
@@ -344,6 +370,9 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/sold TOKEN AMT PRICE\n"
         "/portfolio — positions vs targets\n"
         "/pnl — unrealised PnL\n\n"
+        "<b>Research:</b>\n"
+        "/deepdive CA \u2014 full token analysis\n"
+        "\n"
         "<b>Tracking:</b>\n"
         "/ledger — recent recommendations\n"
     )
@@ -490,6 +519,8 @@ def main():
     app.add_handler(CommandHandler("pnl", cmd_pnl))
     app.add_handler(CommandHandler("bought", cmd_bought))
     app.add_handler(CommandHandler("sold", cmd_sold))
+    app.add_handler(CommandHandler("deepdive", cmd_deepdive))
+    app.add_handler(CommandHandler("dd", cmd_deepdive))
     app.add_handler(CommandHandler("pulse", cmd_pulse))
     app.add_handler(CommandHandler("weekly", cmd_weekly))
     app.add_handler(CommandHandler("chains", cmd_chains))
