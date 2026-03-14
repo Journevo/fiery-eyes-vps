@@ -779,6 +779,84 @@ def _run_scheduled():
     schedule.every(2).hours.do(job_grok_medium)
     schedule.every(2).hours.do(job_youtube)
     schedule.every(4).hours.do(job_4h)
+    schedule.every().day.at("06:00").do(job_x_intel)
+    schedule.every().day.at("10:00").do(job_x_intel)
+    schedule.every().day.at("14:00").do(job_x_intel)
+    schedule.every().day.at("18:00").do(job_x_intel)
+    schedule.every().day.at("22:00").do(job_x_intel)
+    def job_x_intel():
+        """Every 4h (06,10,14,18,22): consolidated X intelligence batch."""
+        log.info("Running X INTEL batch")
+        try:
+            from db.connection import execute
+            # Get X signals from last 4 hours for watchlist tokens
+            watchlist = {"JUP","HYPE","RENDER","BONK","SOL","BTC","PUMP","PENGU","FARTCOIN"}
+            rows = execute("""
+                SELECT token_symbol, source_handle, parsed_type, amount_usd,
+                       signal_strength, signal_category
+                FROM x_intelligence
+                WHERE detected_at > NOW() - INTERVAL '4 hours'
+                  AND signal_strength IN ('medium', 'strong')
+                  AND token_symbol IS NOT NULL
+                ORDER BY detected_at DESC
+            """, fetch=True)
+
+            if not rows:
+                log.info("X INTEL: nothing notable in last 4h, skipping")
+                return
+
+            wl_signals = []
+            macro_signals = []
+            large_signals = []
+            for token, source, ptype, amount, strength, category in rows:
+                tok = (token or "").upper()
+                entry = f"{source}: {ptype} ${tok}"
+                if amount and amount > 0 and amount < 1e11:
+                    entry += f" (${amount:,.0f})"
+                entry += f" [{strength}]"
+
+                if tok in watchlist:
+                    wl_signals.append(entry)
+                elif category in ("macro", "geopolitical", "regulation"):
+                    macro_signals.append(entry)
+                elif amount and amount >= 5_000_000:
+                    large_signals.append(entry)
+
+            if not wl_signals and not macro_signals and not large_signals:
+                log.info("X INTEL: no watchlist/macro/large signals, skipping")
+                return
+
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc).strftime("%H:%M UTC")
+            lines = [f"\U0001f4e1 <b>X INTEL \u2014 {now}</b>", ""]
+
+            if wl_signals:
+                lines.append("<b>Watchlist:</b>")
+                for s in wl_signals[:8]:
+                    lines.append(f"  {s}")
+
+            if macro_signals:
+                lines.append("\n<b>Macro/Geo:</b>")
+                for s in macro_signals[:5]:
+                    lines.append(f"  {s}")
+
+            if large_signals:
+                lines.append("\n<b>Notable (>$5M):</b>")
+                for s in large_signals[:3]:
+                    lines.append(f"  {s}")
+
+            msg = "\n".join(lines)
+
+            import requests as req
+            from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+            req.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                json={"chat_id": TELEGRAM_CHAT_ID, "text": msg,
+                      "parse_mode": "HTML", "disable_web_page_preview": True}, timeout=15)
+            log.info("X INTEL batch sent: %d watchlist, %d macro, %d large",
+                     len(wl_signals), len(macro_signals), len(large_signals))
+        except Exception as e:
+            log.error("X INTEL batch failed: %s", e)
+
     def job_weekly():
         """Weekly: cross-chain + full review."""
         log.info("Running weekly review")

@@ -951,8 +951,18 @@ def process_video(channel_name: str, video: dict) -> dict | None:
     except Exception as e:
         log.error("DB insert failed for %s: %s", video_id, e)
 
-    # Send individual alert
-    _send_video_alert(channel_name, video_title, video_url, published_at, analysis)
+    # Send individual alert — only Sonnet analyses or watchlist-relevant Haiku
+    _watchlist_yt = {"BTC", "SOL", "JUP", "HYPE", "RENDER", "BONK", "PUMP", "PENGU", "FARTCOIN", "MSTR"}
+    is_sonnet = analysis.get("_essay_format", False)
+    has_watchlist = any(
+        (t.get("symbol") or "").upper() in _watchlist_yt
+        for t in analysis.get("tokens_mentioned", [])
+        if isinstance(t, dict) and t.get("conviction", 0) >= 7
+    )
+    if is_sonnet or has_watchlist:
+        _send_video_alert(channel_name, video_title, video_url, published_at, analysis)
+    else:
+        log.debug("Skipping YouTube alert for %s — not Sonnet and no high-conviction watchlist mention", video_title[:50])
 
     return {
         "video_id": video_id,
