@@ -55,6 +55,8 @@ ANALYSIS_PROMPT = """Analyze this crypto/markets video transcript. Extract as JS
 - portfolio_impact: "one specific sentence on what to do differently based on this video"
 
 Respond ONLY in valid JSON (no markdown, no code fences).
+Keep each string value under 200 characters. Be specific but concise.
+If a field has no data, use null or empty array [].
 
 Transcript:
 """
@@ -172,32 +174,34 @@ def _is_processed(video_id: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def _build_ytt_client() -> YouTubeTranscriptApi:
-    """Build YouTubeTranscriptApi with optional proxy and/or cookies."""
-    from youtube_transcript_api.proxies import GenericProxyConfig
+    """Build YouTubeTranscriptApi with Webshare residential proxy."""
+    try:
+        from youtube_transcript_api.proxies import WebshareProxyConfig
+        # Webshare credentials from proxy URL: http://user:pass@host:port
+        proxy_url = YOUTUBE_PROXY_URL
+        if proxy_url and "webshare" in proxy_url:
+            # Parse user:pass from URL
+            from urllib.parse import urlparse
+            parsed = urlparse(proxy_url)
+            proxy_cfg = WebshareProxyConfig(
+                proxy_username=parsed.username,
+                proxy_password=parsed.password,
+            )
+            return YouTubeTranscriptApi(proxy_config=proxy_cfg)
+    except Exception as e:
+        log.debug("WebshareProxyConfig failed: %s, trying generic", e)
 
-    proxy_url = YOUTUBE_PROXY_URL
-    proxy_cfg = GenericProxyConfig(https_url=proxy_url) if proxy_url else None
+    # Fallback: generic proxy or direct
+    try:
+        from youtube_transcript_api.proxies import GenericProxyConfig
+        proxy_url = YOUTUBE_PROXY_URL
+        if proxy_url:
+            proxy_cfg = GenericProxyConfig(https_url=proxy_url)
+            return YouTubeTranscriptApi(proxy_config=proxy_cfg)
+    except Exception:
+        pass
 
-    # Load cookies from cookies.txt into a requests Session if available
-    session = None
-    if COOKIES_FILE.exists():
-        try:
-            import http.cookiejar
-            jar = http.cookiejar.MozillaCookieJar(str(COOKIES_FILE))
-            jar.load(ignore_discard=True, ignore_expires=True)
-            session = requests.Session()
-            session.cookies = jar
-        except Exception as e:
-            log.debug("Failed to load cookies.txt for transcript-api: %s", e)
-
-    # Route session through proxy if configured
-    if proxy_url and session:
-        session.proxies = {"https": proxy_url, "http": proxy_url}
-    elif proxy_url:
-        session = requests.Session()
-        session.proxies = {"https": proxy_url, "http": proxy_url}
-
-    return YouTubeTranscriptApi(proxy_config=proxy_cfg, http_client=session)
+    return YouTubeTranscriptApi()
 
 
 def _get_transcript_api(video_id: str) -> str | None:
@@ -362,11 +366,11 @@ def _analyse_metadata(title: str, description: str, channel_name: str) -> dict |
                     "content-type": "application/json",
                 },
                 json={
-                    "model": HAIKU_MODEL,
-                    "max_tokens": 1500,
+                    "model": model,
+                    "max_tokens": 4000,
                     "messages": [{"role": "user", "content": prompt_text}],
                 },
-                timeout=30,
+                timeout=60,
             )
             resp.raise_for_status()
             data = resp.json()
@@ -395,16 +399,21 @@ def _analyse_metadata(title: str, description: str, channel_name: str) -> dict |
 # Claude AI analysis
 # ---------------------------------------------------------------------------
 
-def _analyse_transcript(transcript: str, video_title: str = "") -> dict | None:
-    """Send transcript to Claude Haiku for analysis with retry."""
+def _analyse_transcript(transcript: str, video_title: str = "", channel_name: str = "") -> dict | None:
+    """Send transcript to Claude for analysis with retry.
+    Uses Sonnet for high-priority channels, Haiku for the rest."""
+    # High-priority channels get Sonnet for better extraction
+    HIGH_PRIORITY = {"All-In Podcast", "Real Vision", "Real Vision Finance",
+                     "Benjamin Cowen", "Raoul Pal", "Lyn Alden"}
+    model = SONNET_MODEL if channel_name in HIGH_PRIORITY else HAIKU_MODEL
     if not ANTHROPIC_API_KEY:
         log.error("ANTHROPIC_API_KEY not set — cannot analyse")
         return None
 
-    # Truncate very long transcripts to ~12K chars (~4K tokens)
-    max_chars = 12000
+    # Truncate transcripts — leave room for structured output
+    max_chars = 10000
     if len(transcript) > max_chars:
-        transcript = transcript[:max_chars] + "\n[TRANSCRIPT TRUNCATED]"
+        transcript = transcript[:8000] + "\n[...TRUNCATED...]\n" + transcript[-2000:]
 
     prompt_text = ANALYSIS_PROMPT + transcript
     if video_title:
@@ -799,7 +808,7 @@ def process_video(channel_name: str, video: dict) -> dict | None:
     if transcript and len(transcript) >= 100:
         # Full analysis
         log.info("Got transcript: %d chars for %s", len(transcript), video_id)
-        analysis = _analyse_transcript(transcript, video_title)
+        analysis = _analyse_transcript(transcript, video_title, channel_name=channel_name)
     else:
         # 2. Fallback: YouTube Data API for metadata
         log.info("No transcript for %s — trying metadata fallback", video_id)
