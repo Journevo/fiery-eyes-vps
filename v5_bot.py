@@ -28,7 +28,7 @@ log = get_logger("v5_bot")
 
 # Persistent reply keyboard — always visible at bottom of chat
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
-    [["📊 Intel", "🐋 Signals", "💼 Portfolio", "🔧 Tools", "❓ Help"]],
+    [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
     resize_keyboard=True,
     is_persistent=True,
 )
@@ -47,54 +47,57 @@ async def handle_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
     if text == "📊 Intel":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Report", callback_data="cmd_report"),
-             InlineKeyboardButton("Cycle", callback_data="cmd_cycle"),
-             InlineKeyboardButton("Liquidity", callback_data="cmd_liquidity"),
-             InlineKeyboardButton("DeFi", callback_data="cmd_defi")],
-            [InlineKeyboardButton("Market", callback_data="cmd_market"),
-             InlineKeyboardButton("Chains", callback_data="cmd_chains"),
-             InlineKeyboardButton("Scores", callback_data="cmd_scores"),
-             InlineKeyboardButton("Synthesis", callback_data="cmd_synthesis")],
-        ])
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("Synthesis", callback_data="cmd_synthesis"),
+            InlineKeyboardButton("Cycle", callback_data="cmd_cycle"),
+            InlineKeyboardButton("Liquidity", callback_data="cmd_liquidity"),
+            InlineKeyboardButton("Report", callback_data="cmd_report"),
+        ]])
         await update.message.reply_text("📊 <b>Intelligence</b>", parse_mode="HTML",
                                          reply_markup=keyboard)
 
     elif text == "🐋 Signals":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Watchlist", callback_data="cmd_watchlist"),
-             InlineKeyboardButton("SunFlow", callback_data="cmd_sunflow"),
-             InlineKeyboardButton("Smart Money", callback_data="cmd_signals")],
-            [InlineKeyboardButton("YouTube", callback_data="cmd_youtube"),
-             InlineKeyboardButton("Supply", callback_data="cmd_supply"),
-             InlineKeyboardButton("Convergence", callback_data="cmd_convergence")],
-        ])
-        await update.message.reply_text("🐋 <b>Signals & Data</b>", parse_mode="HTML",
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("Whale", callback_data="cmd_sunflow"),
+            InlineKeyboardButton("Smart Money", callback_data="cmd_signals"),
+            InlineKeyboardButton("YouTube", callback_data="cmd_youtube"),
+            InlineKeyboardButton("Supply", callback_data="cmd_supply"),
+        ]])
+        await update.message.reply_text("🐋 <b>Signals</b>", parse_mode="HTML",
                                          reply_markup=keyboard)
 
     elif text == "💼 Portfolio":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Positions", callback_data="cmd_portfolio"),
-             InlineKeyboardButton("PnL", callback_data="cmd_pnl"),
-             InlineKeyboardButton("Ledger", callback_data="cmd_ledger")],
-            [InlineKeyboardButton("Exits", callback_data="cmd_exits"),
-             InlineKeyboardButton("Yields", callback_data="cmd_yields")],
-        ])
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("Positions", callback_data="cmd_portfolio"),
+            InlineKeyboardButton("PnL", callback_data="cmd_pnl"),
+            InlineKeyboardButton("Bought", callback_data="tool_bought"),
+            InlineKeyboardButton("Sold", callback_data="tool_sold"),
+        ]])
         await update.message.reply_text("💼 <b>Portfolio</b>", parse_mode="HTML",
                                          reply_markup=keyboard)
 
+    elif text == "📈 Market":
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("Watchlist", callback_data="cmd_watchlist"),
+            InlineKeyboardButton("DeFi", callback_data="cmd_defi"),
+            InlineKeyboardButton("Market", callback_data="cmd_market"),
+            InlineKeyboardButton("Chains", callback_data="cmd_chains"),
+        ]])
+        await update.message.reply_text("📈 <b>Market</b>", parse_mode="HTML",
+                                         reply_markup=keyboard)
+
     elif text == "🔧 Tools":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Analyse YouTube", callback_data="tool_analyse"),
-             InlineKeyboardButton("Deepdive Token", callback_data="tool_deepdive")],
-            [InlineKeyboardButton("Pulse", callback_data="cmd_pulse"),
-             InlineKeyboardButton("Weekly", callback_data="cmd_weekly")],
-        ])
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("Analyse URL", callback_data="tool_analyse"),
+            InlineKeyboardButton("Deepdive", callback_data="tool_deepdive"),
+            InlineKeyboardButton("Ledger", callback_data="cmd_ledger"),
+            InlineKeyboardButton("Help", callback_data="tool_help"),
+        ]])
         await update.message.reply_text("🔧 <b>Tools</b>", parse_mode="HTML",
                                          reply_markup=keyboard)
 
-    elif text == "❓ Help":
-        await cmd_help(update, context)
+    else:
+        log.info("Unrecognized menu text: %s", repr(text))
 
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -138,7 +141,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 self.chat_id = chat_id
                 self._bot = bot
             async def reply_text(self, text, **kwargs):
-                kwargs.pop("reply_markup", None)  # Don't override persistent keyboard
+                kwargs["reply_markup"] = MAIN_KEYBOARD
                 await self._bot.send_message(self.chat_id, text, **kwargs)
 
         fake_msg = FakeMessage(query.message.chat_id, context.bot)
@@ -148,12 +151,40 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "tool_analyse":
         await context.bot.send_message(
             query.message.chat_id,
-            "Send: /analyse <YouTube URL>\nExample: /analyse https://youtube.com/watch?v=abc123")
+            "Send: /analyse <YouTube URL>\nExample: /analyse https://youtube.com/watch?v=abc123",
+            reply_markup=MAIN_KEYBOARD)
 
     elif data == "tool_deepdive":
         await context.bot.send_message(
             query.message.chat_id,
-            "Send: /deepdive <contract address>\nExample: /deepdive JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN")
+            "Send: /deepdive <contract address>\nExample: /deepdive JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+            reply_markup=MAIN_KEYBOARD)
+
+    elif data == "tool_bought":
+        await context.bot.send_message(
+            query.message.chat_id,
+            "Send: /bought TOKEN AMOUNT PRICE\nExample: /bought JUP 1000 0.166",
+            reply_markup=MAIN_KEYBOARD)
+
+    elif data == "tool_sold":
+        await context.bot.send_message(
+            query.message.chat_id,
+            "Send: /sold TOKEN AMOUNT PRICE\nExample: /sold JUP 500 0.25",
+            reply_markup=MAIN_KEYBOARD)
+
+    elif data == "tool_help":
+        # Trigger the help command
+        class FakeUpdate2:
+            def __init__(self, msg):
+                self.message = msg
+        class FakeMsg2:
+            def __init__(self, cid, bot):
+                self.chat_id = cid
+                self._bot = bot
+            async def reply_text(self, text, **kwargs):
+                kwargs["reply_markup"] = MAIN_KEYBOARD
+                await self._bot.send_message(self.chat_id, text, **kwargs)
+        await cmd_help(FakeUpdate2(FakeMsg2(query.message.chat_id, context.bot)), context)
 
 
 async def cmd_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -166,7 +197,7 @@ async def cmd_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Generate and send daily intelligence report."""
-    await update.message.reply_text("⏳ Generating report...")
+    await update.message.reply_text("⏳ Generating report...", reply_markup=MAIN_KEYBOARD)
     try:
         from daily_report import generate_report
         report = generate_report(send_to_telegram=False)
@@ -190,7 +221,7 @@ async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                              disable_web_page_preview=True)
     except Exception as e:
         log.error("/report error: %s", e)
-        await update.message.reply_text(f"⚠️ Report failed: {e}")
+        await update.message.reply_text(f"⚠️ Report failed: {e}", reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_cycle(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -202,10 +233,10 @@ async def cmd_cycle(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(format_cycle_telegram(cycle),
                                              parse_mode="HTML")
         else:
-            await update.message.reply_text("⚠️ BTC price unavailable")
+            await update.message.reply_text("⚠️ BTC price unavailable", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/cycle error: %s", e)
-        await update.message.reply_text(f"⚠️ Error: {e}")
+        await update.message.reply_text(f"⚠️ Error: {e}", reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_watchlist(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -217,10 +248,10 @@ async def cmd_watchlist(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(format_watchlist_telegram(prices),
                                              parse_mode="HTML")
         else:
-            await update.message.reply_text("⚠️ No prices available")
+            await update.message.reply_text("⚠️ No prices available", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/watchlist error: %s", e)
-        await update.message.reply_text(f"⚠️ Error: {e}")
+        await update.message.reply_text(f"⚠️ Error: {e}", reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_liquidity(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -232,10 +263,10 @@ async def cmd_liquidity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(format_liquidity_telegram(data),
                                              parse_mode="HTML")
         else:
-            await update.message.reply_text("⚠️ Liquidity data unavailable")
+            await update.message.reply_text("⚠️ Liquidity data unavailable", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/liquidity error: %s", e)
-        await update.message.reply_text(f"⚠️ Error: {e}")
+        await update.message.reply_text(f"⚠️ Error: {e}", reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_ledger(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -244,10 +275,10 @@ async def cmd_ledger(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from rec_ledger import ensure_tables, format_recent_recs_telegram
         ensure_tables()
         msg = format_recent_recs_telegram()
-        await update.message.reply_text(msg, parse_mode="HTML")
+        await update.message.reply_text(msg, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/ledger error: %s", e)
-        await update.message.reply_text(f"⚠️ Error: {e}")
+        await update.message.reply_text(f"⚠️ Error: {e}", reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_portfolio(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -257,10 +288,10 @@ async def cmd_portfolio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ensure_tables()
         portfolio = get_portfolio()
         msg = format_portfolio_telegram(portfolio)
-        await update.message.reply_text(msg, parse_mode="HTML")
+        await update.message.reply_text(msg, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/portfolio error: %s", e)
-        await update.message.reply_text(f"⚠️ Error: {e}")
+        await update.message.reply_text(f"⚠️ Error: {e}", reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_pnl(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -270,10 +301,10 @@ async def cmd_pnl(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ensure_tables()
         portfolio = get_portfolio()
         msg = format_pnl_telegram(portfolio)
-        await update.message.reply_text(msg, parse_mode="HTML")
+        await update.message.reply_text(msg, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/pnl error: %s", e)
-        await update.message.reply_text(f"⚠️ Error: {e}")
+        await update.message.reply_text(f"⚠️ Error: {e}", reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_bought(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -281,7 +312,7 @@ async def cmd_bought(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         args = context.args
         if not args or len(args) < 3:
-            await update.message.reply_text("Usage: /bought TOKEN AMOUNT PRICE\nExample: /bought JUP 1000 0.166")
+            await update.message.reply_text("Usage: /bought TOKEN AMOUNT PRICE\nExample: /bought JUP 1000 0.166", reply_markup=MAIN_KEYBOARD)
             return
         token = args[0].upper()
         amount = float(args[1])
@@ -289,10 +320,10 @@ async def cmd_bought(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from portfolio import ensure_tables, log_buy, _fmt_price
         ensure_tables()
         log_buy(token, amount, price)
-        await update.message.reply_text(f"✅ Bought {amount:,.0f} {token} at {_fmt_price(price)}")
+        await update.message.reply_text(f"✅ Bought {amount:,.0f} {token} at {_fmt_price(price)}", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/bought error: %s", e)
-        await update.message.reply_text(f"⚠️ Error: {e}")
+        await update.message.reply_text(f"⚠️ Error: {e}", reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_sold(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -300,7 +331,7 @@ async def cmd_sold(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         args = context.args
         if not args or len(args) < 3:
-            await update.message.reply_text("Usage: /sold TOKEN AMOUNT PRICE\nExample: /sold JUP 500 0.25")
+            await update.message.reply_text("Usage: /sold TOKEN AMOUNT PRICE\nExample: /sold JUP 500 0.25", reply_markup=MAIN_KEYBOARD)
             return
         token = args[0].upper()
         amount = float(args[1])
@@ -308,20 +339,20 @@ async def cmd_sold(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from portfolio import ensure_tables, log_sell, _fmt_price
         ensure_tables()
         log_sell(token, amount, price)
-        await update.message.reply_text(f"✅ Sold {amount:,.0f} {token} at {_fmt_price(price)}")
+        await update.message.reply_text(f"✅ Sold {amount:,.0f} {token} at {_fmt_price(price)}", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/sold error: %s", e)
-        await update.message.reply_text(f"⚠️ Error: {e}")
+        await update.message.reply_text(f"⚠️ Error: {e}", reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_sunflow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show SunFlow whale conviction scores."""
     try:
         from sunflow_telegram import get_conviction_summary
-        await update.message.reply_text(get_conviction_summary(), parse_mode="HTML")
+        await update.message.reply_text(get_conviction_summary(), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/sunflow error: %s", e)
-        await update.message.reply_text("Error: " + str(e))
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_exits(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -334,7 +365,7 @@ async def cmd_exits(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML")
     except Exception as e:
         log.error("/exits error: %s", e)
-        await update.message.reply_text("Error: " + str(e))
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_yields(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -342,10 +373,10 @@ async def cmd_yields(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         from dry_powder import run_yield_monitor, format_yields_telegram
         yields = run_yield_monitor()
-        await update.message.reply_text(format_yields_telegram(yields), parse_mode="HTML")
+        await update.message.reply_text(format_yields_telegram(yields), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/yields error: %s", e)
-        await update.message.reply_text("Error: " + str(e))
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_scores(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -353,10 +384,10 @@ async def cmd_scores(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         from token_scores import run_score_update, format_scores_telegram
         scores = run_score_update()
-        await update.message.reply_text(format_scores_telegram(scores), parse_mode="HTML")
+        await update.message.reply_text(format_scores_telegram(scores), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/scores error: %s", e)
-        await update.message.reply_text("Error: " + str(e))
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_analyse(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -364,7 +395,7 @@ async def cmd_analyse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         args = context.args
         if not args:
-            await update.message.reply_text("Usage: /analyse <YouTube URL>\nExample: /analyse https://youtube.com/watch?v=abc123")
+            await update.message.reply_text("Usage: /analyse <YouTube URL>\nExample: /analyse https://youtube.com/watch?v=abc123", reply_markup=MAIN_KEYBOARD)
             return
         url = args[0]
 
@@ -372,11 +403,11 @@ async def cmd_analyse(update: Update, context: ContextTypes.DEFAULT_TYPE):
         import re
         match = re.search(r'(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})', url)
         if not match:
-            await update.message.reply_text("Invalid YouTube URL")
+            await update.message.reply_text("Invalid YouTube URL", reply_markup=MAIN_KEYBOARD)
             return
         video_id = match.group(1)
 
-        await update.message.reply_text(f"Downloading transcript + running Sonnet analysis...\nThis takes 30-60s for long videos.")
+        await update.message.reply_text(f"Downloading transcript + running Sonnet analysis...\nThis takes 30-60s for long videos.", reply_markup=MAIN_KEYBOARD)
 
         from social.youtube_free import _download_captions, _analyse_transcript, SONNET_ANALYSIS_PROMPT
         import requests as req
@@ -384,7 +415,7 @@ async def cmd_analyse(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Get transcript
         transcript = _download_captions(url, video_id)
         if not transcript or len(transcript) < 100:
-            await update.message.reply_text("Could not get transcript for this video. Check if it has captions.")
+            await update.message.reply_text("Could not get transcript for this video. Check if it has captions.", reply_markup=MAIN_KEYBOARD)
             return
 
         # Get video title
@@ -400,7 +431,7 @@ async def cmd_analyse(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
-        await update.message.reply_text(f"Transcript: {len(transcript):,} chars\nTitle: {title}\nAnalysing with Sonnet...")
+        await update.message.reply_text(f"Transcript: {len(transcript):,} chars\nTitle: {title}\nAnalysing with Sonnet...", reply_markup=MAIN_KEYBOARD)
 
         # Analyse — force Sonnet + full transcript
         result = _analyse_transcript(transcript, title, channel_name="All-In Podcast")  # Use priority channel name to trigger Sonnet
@@ -426,17 +457,17 @@ async def cmd_analyse(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     chunks.append(current)
 
             for chunk in chunks:
-                await update.message.reply_text(chunk, parse_mode="HTML", disable_web_page_preview=True)
+                await update.message.reply_text(chunk, parse_mode="HTML", disable_web_page_preview=True, reply_markup=MAIN_KEYBOARD)
         elif result:
             # JSON format fallback
             import json
             text = json.dumps(result, indent=2, default=str)[:4000]
-            await update.message.reply_text(f"<pre>{text}</pre>", parse_mode="HTML")
+            await update.message.reply_text(f"<pre>{text}</pre>", parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
         else:
-            await update.message.reply_text("Analysis failed. The video may be too short or in a non-English language.")
+            await update.message.reply_text("Analysis failed. The video may be too short or in a non-English language.", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/analyse error: %s", e)
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(f"Error: {e}", reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_deepdive(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -444,51 +475,51 @@ async def cmd_deepdive(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         args = context.args
         if not args:
-            await update.message.reply_text("Usage: /deepdive <contract_address>\nExample: /deepdive JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN")
+            await update.message.reply_text("Usage: /deepdive <contract_address>\nExample: /deepdive JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN", reply_markup=MAIN_KEYBOARD)
             return
         address = args[0]
         if len(address) < 20:
-            await update.message.reply_text("Invalid address — need full Solana contract address")
+            await update.message.reply_text("Invalid address — need full Solana contract address", reply_markup=MAIN_KEYBOARD)
             return
-        await update.message.reply_text(f"Diving into <code>{address[:20]}...</code> (10-15s)", parse_mode="HTML")
+        await update.message.reply_text(f"Diving into <code>{address[:20]}...</code> (10-15s)", parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
         from deepdive import run_deepdive, format_deepdive_telegram
         result = run_deepdive(address)
         msg = format_deepdive_telegram(result)
         if len(msg) > 4000:
-            await update.message.reply_text(msg[:4000], parse_mode="HTML")
+            await update.message.reply_text(msg[:4000], parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
             if len(msg) > 4000:
-                await update.message.reply_text(msg[4000:], parse_mode="HTML")
+                await update.message.reply_text(msg[4000:], parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
         else:
-            await update.message.reply_text(msg, parse_mode="HTML")
+            await update.message.reply_text(msg, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/deepdive error: %s", e)
-        await update.message.reply_text("Error: " + str(e))
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_pulse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show 4h pulse — lightweight summary."""
     try:
         from outputs import generate_pulse
-        await update.message.reply_text(generate_pulse(), parse_mode="HTML")
+        await update.message.reply_text(generate_pulse(), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/pulse error: %s", e)
-        await update.message.reply_text("Error: " + str(e))
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_weekly(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show weekly review — performance + accuracy."""
-    await update.message.reply_text("Generating weekly review...")
+    await update.message.reply_text("Generating weekly review...", reply_markup=MAIN_KEYBOARD)
     try:
         from outputs import generate_weekly_review, send_telegram, _split_message
         msg = generate_weekly_review()
         if len(msg) > 4000:
             for chunk in _split_message(msg):
-                await update.message.reply_text(chunk, parse_mode="HTML")
+                await update.message.reply_text(chunk, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
         else:
-            await update.message.reply_text(msg, parse_mode="HTML")
+            await update.message.reply_text(msg, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/weekly error: %s", e)
-        await update.message.reply_text("Error: " + str(e))
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_chains(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -501,12 +532,12 @@ async def cmd_chains(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML")
     except Exception as e:
         log.error("/chains error: %s", e)
-        await update.message.reply_text("Error: " + str(e))
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_synthesis(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Run synthesis engine on demand."""
-    await update.message.reply_text("Running synthesis engine (15-20s)...")
+    await update.message.reply_text("Running synthesis engine (15-20s)...", reply_markup=MAIN_KEYBOARD)
     try:
         from synthesis import run_synthesis, format_synthesis_telegram
         result = run_synthesis()
@@ -514,16 +545,16 @@ async def cmd_synthesis(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg = format_synthesis_telegram(result["output"])
             # Split if needed
             if len(msg) > 4000:
-                await update.message.reply_text(msg[:4000], parse_mode="HTML")
+                await update.message.reply_text(msg[:4000], parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
                 if len(msg) > 4000:
-                    await update.message.reply_text(msg[4000:], parse_mode="HTML")
+                    await update.message.reply_text(msg[4000:], parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
             else:
-                await update.message.reply_text(msg, parse_mode="HTML")
+                await update.message.reply_text(msg, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
         else:
-            await update.message.reply_text("Synthesis failed: " + result.get("error", "unknown"))
+            await update.message.reply_text("Synthesis failed: " + result.get("error", "unknown"), reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/synthesis error: %s", e)
-        await update.message.reply_text("Error: " + str(e))
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_supply(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -536,7 +567,7 @@ async def cmd_supply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML")
     except Exception as e:
         log.error("/supply error: %s", e)
-        await update.message.reply_text("Error: " + str(e))
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_youtube(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -544,10 +575,10 @@ async def cmd_youtube(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         from youtube_intel import run_youtube_intel, format_youtube_telegram
         intel = run_youtube_intel()
-        await update.message.reply_text(format_youtube_telegram(intel), parse_mode="HTML")
+        await update.message.reply_text(format_youtube_telegram(intel), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/youtube error: %s", e)
-        await update.message.reply_text("Error: " + str(e))
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_market(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -556,27 +587,27 @@ async def cmd_market(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from market_structure import run_market_structure, format_market_structure_telegram
         data = run_market_structure()
         if data:
-            await update.message.reply_text(format_market_structure_telegram(data), parse_mode="HTML")
+            await update.message.reply_text(format_market_structure_telegram(data), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
         else:
-            await update.message.reply_text("Market structure data unavailable")
+            await update.message.reply_text("Market structure data unavailable", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/market error: %s", e)
-        await update.message.reply_text("Error: " + str(e))
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_defi(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show DeFiLlama market data."""
-    await update.message.reply_text("Fetching DeFi data...")
+    await update.message.reply_text("Fetching DeFi data...", reply_markup=MAIN_KEYBOARD)
     try:
         from defi_llama import run_defi_tracker, format_defi_telegram
         data = run_defi_tracker()
         if data:
-            await update.message.reply_text(format_defi_telegram(data), parse_mode="HTML")
+            await update.message.reply_text(format_defi_telegram(data), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
         else:
-            await update.message.reply_text("DeFi data unavailable")
+            await update.message.reply_text("DeFi data unavailable", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/defi error: %s", e)
-        await update.message.reply_text("Error: " + str(e))
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -585,7 +616,7 @@ async def cmd_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from social.grok_poller import get_recent_x_signals
         signals = get_recent_x_signals(hours=12, min_strength="medium")
         if not signals:
-            await update.message.reply_text("No medium/strong X signals in last 12h")
+            await update.message.reply_text("No medium/strong X signals in last 12h", reply_markup=MAIN_KEYBOARD)
             return
         lines = ["<b>X SMART MONEY (12h)</b>", ""]
         for s in signals[:10]:
@@ -594,10 +625,10 @@ async def cmd_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if s.get("amount_usd"):
                 amt = " $" + "{:,.0f}".format(s["amount_usd"])
             lines.append(s["source_handle"] + " " + s["parsed_type"] + " $" + sym + amt + " [" + s["signal_strength"] + "]")
-        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/signals error: %s", e)
-        await update.message.reply_text("Error: " + str(e))
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_convergence(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -607,12 +638,12 @@ async def cmd_convergence(update: Update, context: ContextTypes.DEFAULT_TYPE):
         results = detect_convergence(hours=24)
         if results:
             msg = format_convergence_telegram(results)
-            await update.message.reply_text(msg, parse_mode="HTML")
+            await update.message.reply_text(msg, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
         else:
-            await update.message.reply_text("No convergence signals in last 24h")
+            await update.message.reply_text("No convergence signals in last 24h", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/convergence error: %s", e)
-        await update.message.reply_text("Error: " + str(e))
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -821,7 +852,7 @@ def main():
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(
-        filters.TEXT & filters.Regex(r'^(📊 Intel|🐋 Signals|💼 Portfolio|🔧 Tools|❓ Help)$'),
+        filters.TEXT & filters.Regex(r'^(📊 Intel|🐋 Signals|💼 Portfolio|📈 Market|🔧 Tools)$'),
         handle_menu_text))
     app.add_handler(CommandHandler("start", cmd_help))
 
