@@ -44,7 +44,7 @@ def _progress_bar(pct: float, length: int = 20) -> str:
     return "█" * filled + "░" * (length - filled)
 
 
-def generate_report(send_to_telegram: bool = False) -> str:
+def generate_report(send_to_telegram: bool = False, report_type: str = "morning") -> str:
     """Generate the complete daily intelligence report."""
     from btc_cycle import fetch_btc_price, calculate_cycle, SCENARIOS
     from watchlist import fetch_prices, calc_mstr_mnav, CORE_TOKENS, ISA_TOKENS, classify_zone
@@ -540,5 +540,6 @@ def send_telegram(text: str):
 if __name__ == "__main__":
     import sys
     send_tg = "--telegram" in sys.argv
-    report = generate_report(send_to_telegram=send_tg)
+    rtype = "evening" if "--evening" in sys.argv else "morning"
+    report = generate_report(send_to_telegram=send_tg, report_type=rtype)
     print(report)

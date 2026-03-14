@@ -736,34 +736,43 @@ def _run_scheduled():
         except Exception as e:
             log.error("YouTube scan failed: %s", e)
 
-    def job_daily():
-        """Daily at 00:00 UTC: full report + log recommendations."""
-        log.info("Running daily job: report + recommendations")
+    def job_morning_brief():
+        """06:00 UTC (6am UK): Full morning brief — overnight synthesis, what to watch."""
+        log.info("Running MORNING BRIEF")
         try:
             from daily_report import generate_report
-            generate_report(send_to_telegram=True)
+            generate_report(send_to_telegram=True, report_type="morning")
         except Exception as e:
-            log.error("Daily report failed: %s", e)
+            log.error("Morning brief report failed: %s", e)
         try:
             from defi_llama import run_defi_tracker
             run_defi_tracker()
         except Exception as e:
-            log.error("Daily DeFi data failed: %s", e)
+            log.error("Morning DeFi data failed: %s", e)
         try:
             from token_scores import run_score_update
             run_score_update()
         except Exception as e:
-            log.error("Daily scores failed: %s", e)
+            log.error("Morning scores failed: %s", e)
         try:
             from synthesis import run_synthesis
             run_synthesis(send_to_telegram=True)
         except Exception as e:
-            log.error("Daily synthesis failed: %s", e)
+            log.error("Morning synthesis failed: %s", e)
         try:
             from rec_ledger import run_log_daily
             run_log_daily()
         except Exception as e:
-            log.error("Daily rec logging failed: %s", e)
+            log.error("Morning rec logging failed: %s", e)
+
+    def job_evening_review():
+        """20:00 UTC (8pm UK): Evening review — day recap, changes, actions."""
+        log.info("Running EVENING REVIEW")
+        try:
+            from daily_report import generate_report
+            generate_report(send_to_telegram=True, report_type="evening")
+        except Exception as e:
+            log.error("Evening review report failed: %s", e)
 
     # Schedule jobs
     schedule.every(30).minutes.do(job_grok_high)
@@ -780,7 +789,8 @@ def _run_scheduled():
             log.error("Weekly review failed: %s", e)
 
     schedule.every().sunday.at("08:00").do(job_weekly)
-    schedule.every().day.at("00:00").do(job_daily)
+    schedule.every().day.at("06:00").do(job_morning_brief)
+    schedule.every().day.at("20:00").do(job_evening_review)
 
     # Run watchlist + first Grok poll on startup
     job_4h()
