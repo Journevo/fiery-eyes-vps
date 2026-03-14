@@ -173,3 +173,5 @@ handle,display_name,priority,frequency,category
 @yawn_rong,Co-founder FSL,MEDIUM,Every 2hr,STEPN/FSL
 @ZoomerOracle,Zoomer Oracle,MEDIUM,Every 2hr,VC/Alpha
 @___ProfessorX,AI projects,MEDIUM,Every 2hr,AI/Alpha
+@lookonchain,Lookonchain,HIGH,Every 30min,Whale Analysis
+@whalewatchalert,Moby Whale Watch,HIGH,Every 30min,Solana Whale Alerts

@@ -604,3 +604,242 @@ if __name__ == "__main__":
     print("  Generic trending parser: OK")
 
     print("\nAll parser tests passed!")
+
+
+# --- NEW Tier 1 Parsers (Task 8 — v5.1) ---
+
+def parse_lookonchain_tweet(tweet_text: str) -> dict:
+    """Parse a @lookonchain tweet into a structured signal.
+
+    Lookonchain posts contextualised whale analysis: WHO is buying + WHY.
+    Format often includes: entity name, amount, token, context.
+    Examples:
+      "A whale bought 1,000 ETH ($3.5M) from Binance 2 hours ago"
+      "Justin Sun deposited $50M USDT to Binance"
+      "A smart money wallet accumulated 2M $JUP ($340K) in the past 3 days"
+    """
+    sig = _base_signal()
+    text_lower = tweet_text.lower()
+
+    symbols = _extract_symbols(tweet_text)
+    sig["token_symbol"] = symbols[0] if symbols else None
+    sig["token_address"] = _extract_solana_address(tweet_text)
+    sig["amount_usd"] = _extract_usd_amount(tweet_text)
+    sig["wallet_address"] = _extract_solana_address(tweet_text)
+
+    wallet_count = _extract_wallet_count(tweet_text)
+
+    # Detect direction
+    buy_kw = ("bought", "accumulated", "withdrew", "receiving", "acquired", "added")
+    sell_kw = ("sold", "deposited to", "transferred to binance", "transferred to coinbase",
+               "dumped", "selling")
+
+    is_buy = any(kw in text_lower for kw in buy_kw)
+    is_sell = any(kw in text_lower for kw in sell_kw)
+
+    # Detect entity (Lookonchain often names who)
+    entity = None
+    entity_patterns = [
+        r'(?:a |the )?(?:whale|smart money|institution|fund|wallet)',
+        r'(?:justin sun|do kwon|vitalik|satoshi|sbf|cz|brian armstrong)',
+        r'(?:blackrock|fidelity|grayscale|ark invest|galaxy digital)',
+        r'(?:binance|coinbase|kraken|okx|bybit)',
+    ]
+    for pat in entity_patterns:
+        m = re.search(pat, text_lower)
+        if m:
+            entity = m.group(0).strip()
+            break
+
+    if is_buy and not is_sell:
+        sig["parsed_type"] = "whale_buy"
+        sig["extra"] = {"direction": "buy", "entity": entity, "symbols": symbols}
+        sig["signal_strength"] = _compute_signal_strength(
+            wallet_count, sig["amount_usd"],
+            "whale" in text_lower or (sig["amount_usd"] and sig["amount_usd"] >= 100_000))
+    elif is_sell:
+        sig["parsed_type"] = "whale_sell"
+        sig["extra"] = {"direction": "sell", "entity": entity, "symbols": symbols}
+        sig["signal_strength"] = _compute_signal_strength(
+            wallet_count, sig["amount_usd"],
+            sig["amount_usd"] and sig["amount_usd"] >= 100_000)
+    elif any(kw in text_lower for kw in ("exchange outflow", "outflow")):
+        sig["parsed_type"] = "exchange_flow"
+        sig["extra"] = {"direction": "outflow", "entity": entity}
+        sig["signal_strength"] = "medium"
+    elif any(kw in text_lower for kw in ("exchange inflow", "inflow")):
+        sig["parsed_type"] = "exchange_flow"
+        sig["extra"] = {"direction": "inflow", "entity": entity}
+        sig["signal_strength"] = "medium"
+    else:
+        sig["parsed_type"] = "whale_activity"
+        sig["extra"] = {"entity": entity, "symbols": symbols}
+        sig["signal_strength"] = _compute_signal_strength(
+            wallet_count, sig["amount_usd"])
+
+    return sig
+
+
+def parse_moby_tweet(tweet_text: str) -> dict:
+    """Parse a @whalewatchalert (Moby) tweet into a structured signal.
+
+    Moby tracks Solana whale alerts with PnL tracking.
+    Shows trader PROFITABILITY — which is the key differentiator.
+    Examples:
+      "🐋 Whale bought $500K of $JUP — Wallet PnL: +340% (30d)"
+      "Top trader sold 50% of $BONK position — realized +$120K profit"
+    """
+    sig = _base_signal()
+    text_lower = tweet_text.lower()
+
+    symbols = _extract_symbols(tweet_text)
+    sig["token_symbol"] = symbols[0] if symbols else None
+    sig["token_address"] = _extract_solana_address(tweet_text)
+    sig["amount_usd"] = _extract_usd_amount(tweet_text)
+    sig["wallet_address"] = _extract_solana_address(tweet_text)
+
+    # Extract PnL data (key Moby differentiator)
+    pnl_match = re.search(r'[Pp][Nn][Ll]:?\s*([+-]?\d+(?:\.\d+)?)\s*%', tweet_text)
+    pnl_pct = float(pnl_match.group(1)) if pnl_match else None
+
+    profit_match = re.search(r'(?:profit|gain|loss):?\s*\$?([0-9,]+(?:\.[0-9]+)?)\s*([KkMm])?', tweet_text, re.I)
+    realized_pnl = None
+    if profit_match:
+        realized_pnl = float(profit_match.group(1).replace(',', ''))
+        suffix = (profit_match.group(2) or '').upper()
+        if suffix == 'K':
+            realized_pnl *= 1_000
+        elif suffix == 'M':
+            realized_pnl *= 1_000_000
+
+    # Determine wallet quality from PnL
+    wallet_quality = None
+    if pnl_pct is not None:
+        if pnl_pct >= 100:
+            wallet_quality = "elite"
+        elif pnl_pct >= 30:
+            wallet_quality = "profitable"
+        elif pnl_pct >= 0:
+            wallet_quality = "breakeven"
+        else:
+            wallet_quality = "underwater"
+
+    # Direction detection
+    is_buy = any(kw in text_lower for kw in ("bought", "buy", "accumulated", "added"))
+    is_sell = any(kw in text_lower for kw in ("sold", "sell", "dumped", "reduced", "exited"))
+
+    if is_buy:
+        sig["parsed_type"] = "whale_buy"
+        # Strong if high-PnL trader is buying
+        if wallet_quality in ("elite", "profitable"):
+            sig["signal_strength"] = "strong"
+        else:
+            sig["signal_strength"] = _compute_signal_strength(0, sig["amount_usd"],
+                                                               "whale" in text_lower)
+    elif is_sell:
+        sig["parsed_type"] = "whale_sell"
+        sig["signal_strength"] = _compute_signal_strength(0, sig["amount_usd"])
+    else:
+        sig["parsed_type"] = "whale_activity"
+        sig["signal_strength"] = "medium"
+
+    sig["extra"] = {
+        "pnl_pct": pnl_pct,
+        "realized_pnl": realized_pnl,
+        "wallet_quality": wallet_quality,
+        "direction": "buy" if is_buy else ("sell" if is_sell else "unknown"),
+        "symbols": symbols,
+    }
+
+    return sig
+
+
+def parse_aixbt_tweet(tweet_text: str) -> dict:
+    """Parse an @aixbt_agent tweet into a structured signal.
+
+    SPECIAL HANDLING: aixbt posts multi-token summaries with structured format.
+    Each line is a separate signal. Contains cross-chain data (ETH, SOL, BTC).
+    Examples:
+      "TOKEN: $JUP — Smart money inflow $2.4M, 12 wallets accumulating
+       TOKEN: $HYPE — Whale sold $500K, price impact -2.1%
+       TOKEN: $BTC — Exchange outflow 5,000 BTC ($350M)"
+
+    Parse each line independently. Return the highest-strength signal,
+    but store all parsed lines in extra.all_signals.
+    """
+    sig = _base_signal()
+    text_lower = tweet_text.lower()
+
+    # Split into lines and parse each independently
+    lines = [l.strip() for l in tweet_text.split('\n') if l.strip()]
+    all_signals = []
+    best_signal = None
+    best_strength_rank = -1
+    strength_rank = {"weak": 0, "medium": 1, "strong": 2}
+
+    for line in lines:
+        line_lower = line.lower()
+
+        # Skip non-signal lines (headers, footers, timestamps)
+        if len(line) < 15 or not any(c in line for c in ('$', 'TOKEN', 'BTC', 'ETH', 'SOL')):
+            continue
+
+        line_symbols = _extract_symbols(line)
+        line_amount = _extract_usd_amount(line)
+        line_address = _extract_solana_address(line)
+        wallet_count = _extract_wallet_count(line)
+
+        # Determine line type
+        is_buy = any(kw in line_lower for kw in ("inflow", "bought", "accumulated", "buy"))
+        is_sell = any(kw in line_lower for kw in ("outflow", "sold", "dumped", "sell"))
+
+        line_sig = {
+            "symbol": line_symbols[0] if line_symbols else None,
+            "address": line_address,
+            "amount_usd": line_amount,
+            "direction": "buy" if is_buy else ("sell" if is_sell else "neutral"),
+            "wallet_count": wallet_count,
+            "raw_line": line[:200],
+        }
+
+        # Compute strength for this line
+        has_whale = "whale" in line_lower
+        line_strength = _compute_signal_strength(wallet_count, line_amount, has_whale)
+        line_sig["strength"] = line_strength
+
+        all_signals.append(line_sig)
+
+        # Track best signal
+        rank = strength_rank.get(line_strength, 0)
+        if rank > best_strength_rank:
+            best_strength_rank = rank
+            best_signal = line_sig
+
+    # Use best signal for the main return
+    if best_signal:
+        sig["token_symbol"] = best_signal["symbol"]
+        sig["token_address"] = best_signal["address"]
+        sig["amount_usd"] = best_signal["amount_usd"]
+        sig["signal_strength"] = best_signal["strength"]
+        sig["parsed_type"] = "multi_token_summary"
+    else:
+        # Fallback to generic parsing
+        symbols = _extract_symbols(tweet_text)
+        sig["token_symbol"] = symbols[0] if symbols else None
+        sig["amount_usd"] = _extract_usd_amount(tweet_text)
+        sig["parsed_type"] = "info"
+        sig["signal_strength"] = "weak"
+
+    sig["extra"] = {
+        "all_signals": all_signals,
+        "signal_count": len(all_signals),
+        "source": "aixbt",
+    }
+
+    return sig
+
+
+# Update PARSER_MAP with new parsers
+PARSER_MAP["lookonchain"] = parse_lookonchain_tweet
+PARSER_MAP["moby"] = parse_moby_tweet
+PARSER_MAP["aixbt"] = parse_aixbt_tweet

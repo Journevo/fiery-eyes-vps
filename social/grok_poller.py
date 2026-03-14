@@ -39,6 +39,9 @@ SMART_MONEY_ACCOUNTS = [
     {"handle": "kolscan_io",    "interval_min": 30, "parser": "kolscan"},
     {"handle": "SunFlowSolana", "interval_min": 30, "parser": "sunflow"},
     {"handle": "gmaborabot",    "interval_min": 60, "parser": "gmgn"},
+    {"handle": "lookonchain",   "interval_min": 30, "parser": "lookonchain"},
+    {"handle": "whalewatchalert", "interval_min": 30, "parser": "moby"},
+    {"handle": "aixbt_agent",   "interval_min": 30, "parser": "aixbt"},
 ]
 
 # Specialized handles → their parser keys (all others use "generic")
@@ -47,6 +50,9 @@ _SPECIALIZED_PARSERS = {
     "kolscan_io": "kolscan",
     "SunFlowSolana": "sunflow",
     "gmaborabot": "gmgn",
+    "lookonchain": "lookonchain",
+    "whalewatchalert": "moby",
+    "aixbt_agent": "aixbt",
 }
 
 # In-process last-poll timestamps per handle/batch for interval enforcement

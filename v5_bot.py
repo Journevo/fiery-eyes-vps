@@ -180,6 +180,42 @@ async def cmd_sold(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Error: {e}")
 
 
+async def cmd_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show recent X smart money signals."""
+    try:
+        from social.grok_poller import get_recent_x_signals
+        signals = get_recent_x_signals(hours=12, min_strength="medium")
+        if not signals:
+            await update.message.reply_text("No medium/strong X signals in last 12h")
+            return
+        lines = ["<b>X SMART MONEY (12h)</b>", ""]
+        for s in signals[:10]:
+            sym = s.get("token_symbol") or "?"
+            amt = ""
+            if s.get("amount_usd"):
+                amt = " $" + "{:,.0f}".format(s["amount_usd"])
+            lines.append(s["source_handle"] + " " + s["parsed_type"] + " $" + sym + amt + " [" + s["signal_strength"] + "]")
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    except Exception as e:
+        log.error("/signals error: %s", e)
+        await update.message.reply_text("Error: " + str(e))
+
+
+async def cmd_convergence(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show convergence signals (X + on-chain agreement)."""
+    try:
+        from convergence import detect_convergence, format_convergence_telegram
+        results = detect_convergence(hours=24)
+        if results:
+            msg = format_convergence_telegram(results)
+            await update.message.reply_text(msg, parse_mode="HTML")
+        else:
+            await update.message.reply_text("No convergence signals in last 24h")
+    except Exception as e:
+        log.error("/convergence error: %s", e)
+        await update.message.reply_text("Error: " + str(e))
+
+
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show v5 commands."""
     msg = (
@@ -221,6 +257,32 @@ def _run_scheduled():
         except Exception as e:
             log.error("4h swap detection failed: %s", e)
 
+    def job_grok_high():
+        """Every 30 min: poll Tier 1 specialized + HIGH generic accounts."""
+        log.info("Running Grok HIGH tier poll")
+        try:
+            from social.grok_poller import run_smart_money_poll_high
+            result = run_smart_money_poll_high()
+            log.info("Grok HIGH: %d new signals", result.get("total_signals", 0))
+        except Exception as e:
+            log.error("Grok HIGH poll failed: %s", e)
+        # Check convergence after polling
+        try:
+            from convergence import run_convergence_check
+            run_convergence_check(hours=12, send_to_telegram=True)
+        except Exception as e:
+            log.error("Convergence check failed: %s", e)
+
+    def job_grok_medium():
+        """Every 2 hours: poll MEDIUM generic accounts."""
+        log.info("Running Grok MEDIUM tier poll")
+        try:
+            from social.grok_poller import run_smart_money_poll_medium
+            result = run_smart_money_poll_medium()
+            log.info("Grok MEDIUM: %d new signals", result.get("total_signals", 0))
+        except Exception as e:
+            log.error("Grok MEDIUM poll failed: %s", e)
+
     def job_daily():
         """Daily at 00:00 UTC: full report + log recommendations."""
         log.info("Running daily job: report + recommendations")
@@ -236,11 +298,14 @@ def _run_scheduled():
             log.error("Daily rec logging failed: %s", e)
 
     # Schedule jobs
+    schedule.every(30).minutes.do(job_grok_high)
+    schedule.every(2).hours.do(job_grok_medium)
     schedule.every(4).hours.do(job_4h)
     schedule.every().day.at("00:00").do(job_daily)
 
-    # Run watchlist immediately on startup
+    # Run watchlist + first Grok poll on startup
     job_4h()
+    job_grok_high()
 
     while True:
         schedule.run_pending()
@@ -274,6 +339,8 @@ def main():
     app.add_handler(CommandHandler("pnl", cmd_pnl))
     app.add_handler(CommandHandler("bought", cmd_bought))
     app.add_handler(CommandHandler("sold", cmd_sold))
+    app.add_handler(CommandHandler("signals", cmd_signals))
+    app.add_handler(CommandHandler("convergence", cmd_convergence))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("start", cmd_help))
 
