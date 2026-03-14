@@ -91,6 +91,25 @@ def generate_report(send_to_telegram: bool = False) -> str:
     except Exception as e:
         log.error("Nimbus check failed: %s", e)
 
+    # ━━━ SYNTHESIS (auto) ━━━
+    try:
+        # Quick synthesis — 3-4 sentences connecting the dots
+        from synthesis import collect_all_layers, build_synthesis_prompt, call_synthesis
+        layers = collect_all_layers()
+        prompt = build_synthesis_prompt(layers)
+        # Add instruction for brief output
+        prompt = prompt.replace("Keep total output under 500 words.",
+            "Keep total output under 200 words. ONLY sections 1 (NARRATIVE) and 5 (ACTIONABLE). Skip others.")
+        result = call_synthesis(prompt)
+        if result.get("output"):
+            synth_text = result["output"].strip()
+            # Keep only first ~600 chars for report brevity
+            if len(synth_text) > 600:
+                synth_text = synth_text[:600].rsplit(".", 1)[0] + "."
+            sections.append(f"\n━━━ <b>SYNTHESIS</b> ━━━\n{synth_text}")
+    except Exception as e:
+        log.error("Report synthesis failed: %s", e)
+
     # ━━━ BTC CYCLE ━━━
     if btc_price and cycle:
         bar = _progress_bar(cycle["bear_progress_pct"])
@@ -165,11 +184,19 @@ def generate_report(send_to_telegram: bool = False) -> str:
         m2_days = liq.get("m2_lag_days", 0)
         alignment = liq.get("alignment", "UNKNOWN")
 
+        # Forward-looking 3-timeframe format
+        regime_emoji = "\u2705" if regime == "EXPANDING" else ("\U0001f534" if regime == "CONTRACTING" else "\u23f3")
+        m2_context = ""
+        if m2_status == "EXPIRED":
+            m2_context = " (QT handbrake \u23f3)"
+        elif m2_status == "WINDOW":
+            m2_context = " (BTC response expected \U0001f525)"
+
         sections.append(
             f"\n━━━ <b>LIQUIDITY</b> ━━━\n"
-            f"US {us_str} ({us_dir}) | M2 {m2_str} | DXY {dxy_str}\n"
-            f"FRED: {regime} (slope {slope:+.1f}%) | M2 lag: {m2_status} ({m2_days}d)\n"
-            f"Alignment: {alignment}"
+            f"<b>SHORT:</b> US {us_str} ({us_dir} {regime} {slope:+.1f}%) {regime_emoji}\n"
+            f"<b>MED:</b> Global ${liq.get('global_net_liq', 0):.2f}T | M2 {m2_str} | lag {m2_days}d {m2_status}{m2_context}\n"
+            f"<b>LONG:</b> DXY {dxy_str} | {alignment}"
         )
 
     # ━━━ WATCHLIST ━━━
@@ -391,26 +418,75 @@ def generate_report(send_to_telegram: bool = False) -> str:
     )
 
     # ━━━ RECOMMENDATION ━━━
-    # Determine recommendations based on data
     recs = []
     if prices:
-        # Find deepest value core tokens
-        core_by_depth = sorted(
-            [(s, prices[s]) for s in CORE_TOKENS if s in prices],
-            key=lambda x: x[1]["pct_from_ath"]
-        )
-        if core_by_depth:
-            focus = core_by_depth[0]
-            recs.append(f"FOCUS: {focus[0]} (deepest value at {focus[1]['pct_from_ath']:+.0f}% ATH)")
+      try:
+        # Get SunFlow conviction data
+        sf_conviction = {}
+        try:
+            sf_rows = execute("""
+                SELECT token, conviction_score, net_flow_usd, timeframes_present
+                FROM sunflow_conviction WHERE is_watchlist = TRUE
+                ORDER BY conviction_score DESC
+            """, fetch=True)
+            for row in (sf_rows or []):
+                sf_conviction[row[0]] = {"score": row[1], "net": row[2], "tfs": row[3]}
+        except Exception:
+            pass
 
-        if len(core_by_depth) > 1:
-            watch = core_by_depth[1]
-            recs.append(f"WATCH: {watch[0]} ({watch[1]['pct_from_ath']:+.0f}% ATH)")
+        # Get smart money source count (24h)
+        sm_sources = {}
+        try:
+            sm_rows = execute("""
+                SELECT token_symbol, COUNT(DISTINCT source_handle) as src
+                FROM x_intelligence
+                WHERE detected_at > NOW() - INTERVAL '24 hours'
+                  AND signal_strength IN ('medium', 'strong')
+                  AND token_symbol IS NOT NULL
+                GROUP BY token_symbol
+            """, fetch=True)
+            for row in (sm_rows or []):
+                sm_sources[row[0].upper()] = row[1]
+        except Exception:
+            pass
 
-        # Tokens in Mid range = patience
-        mid_tokens = [s for s, d in prices.items() if s in CORE_TOKENS and "Mid" in d.get("zone", "")]
-        for t in mid_tokens:
-            recs.append(f"PATIENCE: {t} (wait for deeper pullback or cycle progress >60%)")
+        # Score each token: SunFlow conviction + smart money + depth
+        all_tokens = list(set(CORE_TOKENS) | set(["PUMP", "PENGU", "FARTCOIN"]))
+        scored = []
+        for sym in all_tokens:
+            if sym not in prices:
+                continue
+            d = prices[sym]
+            sf = sf_conviction.get(sym, {})
+            sm = sm_sources.get(sym, 0)
+            # Composite score: SunFlow conviction (40%) + smart money sources (30%) + depth (30%)
+            sf_score = sf.get("score", 0) / 16 * 10  # Normalize to 0-10
+            sm_score = min(sm * 3, 10)  # 0-3 sources = 0-9
+            depth_score = min(abs(d["pct_from_ath"]) / 10, 10)  # -90% = 9
+            composite = sf_score * 0.4 + sm_score * 0.3 + depth_score * 0.3
+            scored.append((sym, composite, sf, sm, d))
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+        log.info("Recommendation scoring: %s", [(s[0], round(s[1],1)) for s in scored])
+
+        for sym, comp, sf, sm, d in scored[:4]:
+            sf_str = f"SunFlow {sf.get('tfs', 0)}/4 TF" if sf.get("tfs") else "no SunFlow"
+            sm_str = f"{sm} X sources" if sm else "no X signals"
+            zone = d.get("zone", "")
+
+            if comp >= 5:
+                action = "FOCUS"
+            elif comp >= 3 or "Mid" in zone:
+                action = "WATCH" if "Mid" not in zone else "PATIENCE"
+            else:
+                action = "WATCH"
+
+            if "Mid" in zone and comp < 5:
+                action = "PATIENCE"
+
+            recs.append(f"{action}: {sym} ({d['pct_from_ath']:+.0f}% ATH | {sf_str} | {sm_str})")
+      except Exception as e:
+        log.error("Recommendation scoring failed: %s", e)
 
     if bear_pct < 50:
         recs.append("AVOID: adding new positions until bear >50%")
