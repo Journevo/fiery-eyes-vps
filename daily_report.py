@@ -224,6 +224,20 @@ def generate_report(send_to_telegram: bool = False) -> str:
     except Exception as e:
         log.error("DeFi section failed: %s", e)
 
+    # ━━━ YOUTUBE ━━━
+    try:
+        from youtube_intel import get_recent_youtube_intel, format_youtube_for_report
+        yt_intel = get_recent_youtube_intel(hours=48)
+        yt_section = format_youtube_for_report(yt_intel)
+        if yt_section:
+            sections.append("\n━━━ <b>YOUTUBE</b> ━━━\n" + yt_section)
+            # Add convergence note
+            for c in yt_intel.get("convergence", []):
+                if c["symbol"] in ("JUP", "HYPE", "RENDER", "BONK"):
+                    sections.append(f"  🔀 ${c['symbol']}: {c['count']} channels bullish")
+    except Exception as e:
+        log.error("YouTube section failed: %s", e)
+
     # ━━━ REGIME ━━━
     bear_pct = cycle["bear_progress_pct"] if btc_price else 0
     if bear_pct < 60:

@@ -180,6 +180,17 @@ async def cmd_sold(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Error: {e}")
 
 
+async def cmd_youtube(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show YouTube intelligence summary."""
+    try:
+        from youtube_intel import run_youtube_intel, format_youtube_telegram
+        intel = run_youtube_intel()
+        await update.message.reply_text(format_youtube_telegram(intel), parse_mode="HTML")
+    except Exception as e:
+        log.error("/youtube error: %s", e)
+        await update.message.reply_text("Error: " + str(e))
+
+
 async def cmd_market(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show market structure (OI, funding, L/S, F&G)."""
     try:
@@ -319,6 +330,15 @@ def _run_scheduled():
         except Exception as e:
             log.error("Grok MEDIUM poll failed: %s", e)
 
+    def job_youtube():
+        """Every 2 hours: scan YouTube channels for new videos."""
+        log.info("Running YouTube scan")
+        try:
+            from social.youtube_free import run_youtube_scan
+            run_youtube_scan()
+        except Exception as e:
+            log.error("YouTube scan failed: %s", e)
+
     def job_daily():
         """Daily at 00:00 UTC: full report + log recommendations."""
         log.info("Running daily job: report + recommendations")
@@ -341,6 +361,7 @@ def _run_scheduled():
     # Schedule jobs
     schedule.every(30).minutes.do(job_grok_high)
     schedule.every(2).hours.do(job_grok_medium)
+    schedule.every(2).hours.do(job_youtube)
     schedule.every(4).hours.do(job_4h)
     schedule.every().day.at("00:00").do(job_daily)
 
@@ -380,6 +401,7 @@ def main():
     app.add_handler(CommandHandler("pnl", cmd_pnl))
     app.add_handler(CommandHandler("bought", cmd_bought))
     app.add_handler(CommandHandler("sold", cmd_sold))
+    app.add_handler(CommandHandler("youtube", cmd_youtube))
     app.add_handler(CommandHandler("market", cmd_market))
     app.add_handler(CommandHandler("defi", cmd_defi))
     app.add_handler(CommandHandler("signals", cmd_signals))
