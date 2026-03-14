@@ -377,11 +377,33 @@ def _store_signal(handle: str, tweet_id: str, tweet_text: str,
         return False
 
 
+# v5.1 watchlist tokens — only these get immediate alerts (unless huge)
+_WATCHLIST_SYMBOLS = {"JUP", "HYPE", "RENDER", "BONK", "SOL", "BTC"}
+_ALERT_MIN_USD_NON_WATCHLIST = 5_000_000  # $5M minimum for non-watchlist alerts
+
+
 def _route_signal_alert(handle: str, parsed: dict, tweet_text: str):
-    """Route a parsed signal through the severity system."""
+    """Route a parsed signal through the severity system.
+
+    Filtering rules (v5.1):
+    - Watchlist tokens: always alert on medium+ signals
+    - Non-watchlist: only alert if >$5M or commentary/info types are suppressed
+    - Everything else: logged to DB only, surfaces in daily report
+    """
     strength = parsed.get("signal_strength", "weak")
     parsed_type = parsed.get("parsed_type", "info")
     symbol = parsed.get("token_symbol") or "?"
+    amount = parsed.get("amount_usd") or 0
+
+    # Decide whether to send a Telegram alert
+    is_watchlist = symbol.upper() in _WATCHLIST_SYMBOLS if symbol != "?" else False
+    is_large = amount >= _ALERT_MIN_USD_NON_WATCHLIST
+
+    # Skip Telegram alert for non-watchlist, non-large signals
+    if not is_watchlist and not is_large:
+        log.debug("Suppressed alert: @%s %s $%s [%s] (not watchlist, $%.0f < $5M)",
+                  handle, parsed_type, symbol, strength, amount)
+        return
 
     try:
         from telegram_bot.severity import route_alert

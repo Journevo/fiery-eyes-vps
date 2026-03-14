@@ -757,82 +757,50 @@ def parse_moby_tweet(tweet_text: str) -> dict:
 def parse_aixbt_tweet(tweet_text: str) -> dict:
     """Parse an @aixbt_agent tweet into a structured signal.
 
-    SPECIAL HANDLING: aixbt posts multi-token summaries with structured format.
-    Each line is a separate signal. Contains cross-chain data (ETH, SOL, BTC).
-    Examples:
-      "TOKEN: $JUP — Smart money inflow $2.4M, 12 wallets accumulating
-       TOKEN: $HYPE — Whale sold $500K, price impact -2.1%
-       TOKEN: $BTC — Exchange outflow 5,000 BTC ($350M)"
-
-    Parse each line independently. Return the highest-strength signal,
-    but store all parsed lines in extra.all_signals.
+    aixbt posts conversational analysis mentioning tokens naturally.
+    Extract: token symbols, dollar amounts, sentiment, key metrics.
     """
     sig = _base_signal()
     text_lower = tweet_text.lower()
 
-    # Split into lines and parse each independently
-    lines = [l.strip() for l in tweet_text.split('\n') if l.strip()]
-    all_signals = []
-    best_signal = None
-    best_strength_rank = -1
-    strength_rank = {"weak": 0, "medium": 1, "strong": 2}
+    # Extract all tokens mentioned
+    symbols = _extract_symbols(tweet_text)
+    sig["token_symbol"] = symbols[0] if symbols else None
+    sig["token_address"] = _extract_solana_address(tweet_text)
+    sig["amount_usd"] = _extract_usd_amount(tweet_text)
+    wallet_count = _extract_wallet_count(tweet_text)
 
-    for line in lines:
-        line_lower = line.lower()
+    # Classify the tweet content
+    buy_kw = ("smart money", "accumulating", "inflow", "bought", "holding", "bullish",
+              "revenue", "growing", "partnership", "upgrade")
+    sell_kw = ("sold", "outflow", "dumped", "vulnerability", "exploit", "hack",
+               "bearish", "declining", "risk")
 
-        # Skip non-signal lines (headers, footers, timestamps)
-        if len(line) < 15 or not any(c in line for c in ('$', 'TOKEN', 'BTC', 'ETH', 'SOL')):
-            continue
+    buy_score = sum(1 for kw in buy_kw if kw in text_lower)
+    sell_score = sum(1 for kw in sell_kw if kw in text_lower)
 
-        line_symbols = _extract_symbols(line)
-        line_amount = _extract_usd_amount(line)
-        line_address = _extract_solana_address(line)
-        wallet_count = _extract_wallet_count(line)
-
-        # Determine line type
-        is_buy = any(kw in line_lower for kw in ("inflow", "bought", "accumulated", "buy"))
-        is_sell = any(kw in line_lower for kw in ("outflow", "sold", "dumped", "sell"))
-
-        line_sig = {
-            "symbol": line_symbols[0] if line_symbols else None,
-            "address": line_address,
-            "amount_usd": line_amount,
-            "direction": "buy" if is_buy else ("sell" if is_sell else "neutral"),
-            "wallet_count": wallet_count,
-            "raw_line": line[:200],
-        }
-
-        # Compute strength for this line
-        has_whale = "whale" in line_lower
-        line_strength = _compute_signal_strength(wallet_count, line_amount, has_whale)
-        line_sig["strength"] = line_strength
-
-        all_signals.append(line_sig)
-
-        # Track best signal
-        rank = strength_rank.get(line_strength, 0)
-        if rank > best_strength_rank:
-            best_strength_rank = rank
-            best_signal = line_sig
-
-    # Use best signal for the main return
-    if best_signal:
-        sig["token_symbol"] = best_signal["symbol"]
-        sig["token_address"] = best_signal["address"]
-        sig["amount_usd"] = best_signal["amount_usd"]
-        sig["signal_strength"] = best_signal["strength"]
-        sig["parsed_type"] = "multi_token_summary"
+    if buy_score > sell_score and buy_score >= 2:
+        sig["parsed_type"] = "bullish_analysis"
+        sig["signal_strength"] = _compute_signal_strength(wallet_count, sig["amount_usd"],
+                                                           "smart money" in text_lower)
+    elif sell_score > buy_score and sell_score >= 2:
+        sig["parsed_type"] = "bearish_analysis"
+        sig["signal_strength"] = _compute_signal_strength(wallet_count, sig["amount_usd"],
+                                                           "exploit" in text_lower or "hack" in text_lower)
+    elif sig["amount_usd"] and sig["amount_usd"] >= 100_000:
+        sig["parsed_type"] = "market_data"
+        sig["signal_strength"] = "medium"
+    elif symbols:
+        sig["parsed_type"] = "token_mention"
+        sig["signal_strength"] = "weak"
     else:
-        # Fallback to generic parsing
-        symbols = _extract_symbols(tweet_text)
-        sig["token_symbol"] = symbols[0] if symbols else None
-        sig["amount_usd"] = _extract_usd_amount(tweet_text)
-        sig["parsed_type"] = "info"
+        sig["parsed_type"] = "commentary"
         sig["signal_strength"] = "weak"
 
     sig["extra"] = {
-        "all_signals": all_signals,
-        "signal_count": len(all_signals),
+        "all_symbols": symbols,
+        "buy_indicators": buy_score,
+        "sell_indicators": sell_score,
         "source": "aixbt",
     }
 

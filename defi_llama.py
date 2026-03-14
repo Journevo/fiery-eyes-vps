@@ -251,6 +251,35 @@ def store_defi_data(data: dict):
     log.info("Stored DeFi market data for %s", data["date"])
 
 
+def get_historical_comparison(date: str) -> dict:
+    """Get previous day and 30-day-ago data for velocity calculations."""
+    from datetime import datetime, timedelta
+    try:
+        d = datetime.strptime(date, "%Y-%m-%d")
+        prev_day = (d - timedelta(days=1)).strftime("%Y-%m-%d")
+        prev_month = (d - timedelta(days=30)).strftime("%Y-%m-%d")
+
+        row_1d = execute(
+            "SELECT total_tvl, sol_tvl, sol_dex_vol_24h, total_stablecoins, hype_rev_24h, jup_rev_24h, pump_rev_24h FROM defi_market WHERE date = %s",
+            (prev_day,), fetch=True)
+        row_30d = execute(
+            "SELECT total_tvl, sol_tvl, sol_dex_vol_24h, total_stablecoins, hype_rev_24h, jup_rev_24h, pump_rev_24h FROM defi_market WHERE date = %s",
+            (prev_month,), fetch=True)
+
+        result = {}
+        fields = ["total_tvl", "sol_tvl", "sol_dex_vol_24h", "total_stablecoins", "hype_rev_24h", "jup_rev_24h", "pump_rev_24h"]
+        if row_1d and row_1d[0]:
+            for i, f in enumerate(fields):
+                result[f"{f}_1d"] = row_1d[0][i]
+        if row_30d and row_30d[0]:
+            for i, f in enumerate(fields):
+                result[f"{f}_30d"] = row_30d[0][i]
+        return result
+    except Exception as e:
+        log.debug("Historical comparison unavailable: %s", e)
+        return {}
+
+
 # ---------------------------------------------------------------------------
 # Telegram output
 # ---------------------------------------------------------------------------
@@ -276,8 +305,16 @@ def format_defi_telegram(data: dict) -> str:
     """Format DeFi data for Telegram."""
     lines = ["📊 <b>DeFi MARKET</b>", ""]
 
-    # TVL section
-    lines.append(f"<b>TVL:</b> {_fmt_usd(data['total_tvl'])} total")
+    # Get historical data for velocity
+    hist = get_historical_comparison(data.get("date", ""))
+
+    # TVL section with velocity
+    tvl_vel = ""
+    if hist.get("total_tvl_30d") and hist["total_tvl_30d"] > 0:
+        mom = ((data["total_tvl"] - hist["total_tvl_30d"]) / hist["total_tvl_30d"]) * 100
+        arrow = "↗" if mom > 1 else ("↘" if mom < -1 else "→")
+        tvl_vel = f" ({arrow} {mom:+.1f}% MoM)"
+    lines.append(f"<b>TVL:</b> {_fmt_usd(data['total_tvl'])}{tvl_vel}")
     rankings = data.get("tvl_rankings", {})
     for chain in COMPARE_CHAINS:
         r = rankings.get(chain, {})
@@ -302,15 +339,24 @@ def format_defi_telegram(data: dict) -> str:
     if stables:
         lines.append(f"\n<b>Stablecoins:</b> {_fmt_usd(stables)}")
 
-    # Protocol revenue
+    # Protocol revenue with velocity
     lines.append(f"\n<b>Protocol Revenue:</b>")
+    rev_hist_keys = {"HYPE": "hype_rev_24h", "JUP": "jup_rev_24h", "PUMP": "pump_rev_24h"}
     for symbol in ["HYPE", "JUP", "PUMP"]:
         rev = data.get("revenues", {}).get(symbol, {})
-        if rev:
+        if rev and rev.get("rev_24h"):
             r24 = rev.get("rev_24h", 0)
             r30 = rev.get("rev_30d", 0)
             ann = rev.get("annualised", 0)
-            lines.append(f"  {symbol}: {_fmt_usd(r24)}/day | {_fmt_usd(r30)}/30d | {_fmt_usd(ann)}/yr")
+            # MoM velocity from historical
+            vel = ""
+            hist_key = rev_hist_keys.get(symbol, "")
+            prev_30d = hist.get(f"{hist_key}_30d")
+            if prev_30d and prev_30d > 0:
+                mom = ((r24 - prev_30d) / prev_30d) * 100
+                arrow = "↗" if mom > 5 else ("↘" if mom < -5 else "→")
+                vel = f" {arrow}{mom:+.0f}%"
+            lines.append(f"  {symbol}: {_fmt_usd(r24)}/day | {_fmt_usd(ann)}/yr{vel}")
 
     return "\n".join(lines)
 
