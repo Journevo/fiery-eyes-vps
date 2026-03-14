@@ -20,16 +20,150 @@ import threading
 import time
 import schedule
 from datetime import datetime, timezone
-from telegram import Update, Bot
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import Update, Bot, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, get_logger
 
 log = get_logger("v5_bot")
+
+# Persistent reply keyboard — always visible at bottom of chat
+MAIN_KEYBOARD = ReplyKeyboardMarkup(
+    [["📊 Intel", "🐋 Signals", "💼 Portfolio", "🔧 Tools", "❓ Help"]],
+    resize_keyboard=True,
+    is_persistent=True,
+)
+
+
 
 
 # ---------------------------------------------------------------------------
 # Command handlers
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Persistent menu handlers
+# ---------------------------------------------------------------------------
+async def handle_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle persistent keyboard button taps."""
+    text = update.message.text
+
+    if text == "📊 Intel":
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Report", callback_data="cmd_report"),
+             InlineKeyboardButton("Cycle", callback_data="cmd_cycle"),
+             InlineKeyboardButton("Liquidity", callback_data="cmd_liquidity"),
+             InlineKeyboardButton("DeFi", callback_data="cmd_defi")],
+            [InlineKeyboardButton("Market", callback_data="cmd_market"),
+             InlineKeyboardButton("Chains", callback_data="cmd_chains"),
+             InlineKeyboardButton("Scores", callback_data="cmd_scores"),
+             InlineKeyboardButton("Synthesis", callback_data="cmd_synthesis")],
+        ])
+        await update.message.reply_text("📊 <b>Intelligence</b>", parse_mode="HTML",
+                                         reply_markup=keyboard)
+
+    elif text == "🐋 Signals":
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Watchlist", callback_data="cmd_watchlist"),
+             InlineKeyboardButton("SunFlow", callback_data="cmd_sunflow"),
+             InlineKeyboardButton("Smart Money", callback_data="cmd_signals")],
+            [InlineKeyboardButton("YouTube", callback_data="cmd_youtube"),
+             InlineKeyboardButton("Supply", callback_data="cmd_supply"),
+             InlineKeyboardButton("Convergence", callback_data="cmd_convergence")],
+        ])
+        await update.message.reply_text("🐋 <b>Signals & Data</b>", parse_mode="HTML",
+                                         reply_markup=keyboard)
+
+    elif text == "💼 Portfolio":
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Positions", callback_data="cmd_portfolio"),
+             InlineKeyboardButton("PnL", callback_data="cmd_pnl"),
+             InlineKeyboardButton("Ledger", callback_data="cmd_ledger")],
+            [InlineKeyboardButton("Exits", callback_data="cmd_exits"),
+             InlineKeyboardButton("Yields", callback_data="cmd_yields")],
+        ])
+        await update.message.reply_text("💼 <b>Portfolio</b>", parse_mode="HTML",
+                                         reply_markup=keyboard)
+
+    elif text == "🔧 Tools":
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Analyse YouTube", callback_data="tool_analyse"),
+             InlineKeyboardButton("Deepdive Token", callback_data="tool_deepdive")],
+            [InlineKeyboardButton("Pulse", callback_data="cmd_pulse"),
+             InlineKeyboardButton("Weekly", callback_data="cmd_weekly")],
+        ])
+        await update.message.reply_text("🔧 <b>Tools</b>", parse_mode="HTML",
+                                         reply_markup=keyboard)
+
+    elif text == "❓ Help":
+        await cmd_help(update, context)
+
+
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle inline keyboard button callbacks."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    # Map callback data to command functions
+    cmd_map = {
+        "cmd_report": cmd_report,
+        "cmd_cycle": cmd_cycle,
+        "cmd_watchlist": cmd_watchlist,
+        "cmd_liquidity": cmd_liquidity,
+        "cmd_defi": cmd_defi,
+        "cmd_market": cmd_market,
+        "cmd_chains": cmd_chains,
+        "cmd_scores": cmd_scores,
+        "cmd_synthesis": cmd_synthesis,
+        "cmd_sunflow": cmd_sunflow,
+        "cmd_signals": cmd_signals,
+        "cmd_youtube": cmd_youtube,
+        "cmd_supply": cmd_supply,
+        "cmd_convergence": cmd_convergence,
+        "cmd_portfolio": cmd_portfolio,
+        "cmd_pnl": cmd_pnl,
+        "cmd_ledger": cmd_ledger,
+        "cmd_exits": cmd_exits,
+        "cmd_yields": cmd_yields,
+        "cmd_pulse": cmd_pulse,
+        "cmd_weekly": cmd_weekly,
+    }
+
+    if data in cmd_map:
+        # Create a fake Update with the callback's message for reply
+        class FakeUpdate:
+            def __init__(self, message):
+                self.message = message
+        class FakeMessage:
+            def __init__(self, chat_id, bot):
+                self.chat_id = chat_id
+                self._bot = bot
+            async def reply_text(self, text, **kwargs):
+                kwargs.pop("reply_markup", None)  # Don't override persistent keyboard
+                await self._bot.send_message(self.chat_id, text, **kwargs)
+
+        fake_msg = FakeMessage(query.message.chat_id, context.bot)
+        fake_update = FakeUpdate(fake_msg)
+        await cmd_map[data](fake_update, context)
+
+    elif data == "tool_analyse":
+        await context.bot.send_message(
+            query.message.chat_id,
+            "Send: /analyse <YouTube URL>\nExample: /analyse https://youtube.com/watch?v=abc123")
+
+    elif data == "tool_deepdive":
+        await context.bot.send_message(
+            query.message.chat_id,
+            "Send: /deepdive <contract address>\nExample: /deepdive JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN")
+
+
+async def cmd_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show the persistent keyboard menu."""
+    await update.message.reply_text(
+        "🔥 <b>FIERY EYES v5.1</b>\nTap a button below:",
+        parse_mode="HTML",
+        reply_markup=MAIN_KEYBOARD)
+
+
 async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Generate and send daily intelligence report."""
     await update.message.reply_text("⏳ Generating report...")
@@ -482,7 +616,7 @@ async def cmd_convergence(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show v5 commands."""
+    """Show v5 commands and ensure persistent keyboard."""
     msg = (
         "🔥 <b>FIERY EYES v5.1</b>\n\n"
         "<b>Reports:</b>\n"
@@ -505,7 +639,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "<b>Tracking:</b>\n"
         "/ledger — recent recommendations\n"
     )
-    await update.message.reply_text(msg, parse_mode="HTML")
+    await update.message.reply_text(msg, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
 
 
 # ---------------------------------------------------------------------------
@@ -683,9 +817,30 @@ def main():
     app.add_handler(CommandHandler("defi", cmd_defi))
     app.add_handler(CommandHandler("signals", cmd_signals))
     app.add_handler(CommandHandler("convergence", cmd_convergence))
+    app.add_handler(CommandHandler("menu", cmd_menu))
     app.add_handler(CommandHandler("help", cmd_help))
+    app.add_handler(CallbackQueryHandler(handle_callback))
+    app.add_handler(MessageHandler(
+        filters.TEXT & filters.Regex(r'^(📊 Intel|🐋 Signals|💼 Portfolio|🔧 Tools|❓ Help)$'),
+        handle_menu_text))
     app.add_handler(CommandHandler("start", cmd_help))
 
+    async def post_init(application):
+        from telegram import BotCommand
+        try:
+            await application.bot.set_my_commands([
+                BotCommand("menu", "Open main menu"),
+                BotCommand("report", "Full daily report"),
+                BotCommand("cycle", "BTC cycle position"),
+                BotCommand("watchlist", "Token prices and zones"),
+                BotCommand("portfolio", "My positions"),
+                BotCommand("analyse", "Analyse any YouTube URL"),
+            ])
+            log.info("Bot commands registered with Telegram")
+        except Exception as e:
+            log.error("Failed to register bot commands: %s", e)
+
+    app.post_init = post_init
     log.info("Bot started. Polling for commands...")
     app.run_polling(drop_pending_updates=True)
 
