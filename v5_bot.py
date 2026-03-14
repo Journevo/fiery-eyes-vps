@@ -180,6 +180,17 @@ async def cmd_sold(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Error: {e}")
 
 
+async def cmd_scores(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show auto-updated token scores."""
+    try:
+        from token_scores import run_score_update, format_scores_telegram
+        scores = run_score_update()
+        await update.message.reply_text(format_scores_telegram(scores), parse_mode="HTML")
+    except Exception as e:
+        log.error("/scores error: %s", e)
+        await update.message.reply_text("Error: " + str(e))
+
+
 async def cmd_deepdive(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Deep dive a token: /deepdive <contract_address>"""
     try:
@@ -371,6 +382,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/portfolio — positions vs targets\n"
         "/pnl — unrealised PnL\n\n"
         "<b>Research:</b>\n"
+        "/scores \u2014 auto-updated token scores\n"
         "/deepdive CA \u2014 full token analysis\n"
         "\n"
         "<b>Tracking:</b>\n"
@@ -456,6 +468,11 @@ def _run_scheduled():
         except Exception as e:
             log.error("Daily DeFi data failed: %s", e)
         try:
+            from token_scores import run_score_update
+            run_score_update()
+        except Exception as e:
+            log.error("Daily scores failed: %s", e)
+        try:
             from synthesis import run_synthesis
             run_synthesis(send_to_telegram=True)
         except Exception as e:
@@ -519,6 +536,7 @@ def main():
     app.add_handler(CommandHandler("pnl", cmd_pnl))
     app.add_handler(CommandHandler("bought", cmd_bought))
     app.add_handler(CommandHandler("sold", cmd_sold))
+    app.add_handler(CommandHandler("scores", cmd_scores))
     app.add_handler(CommandHandler("deepdive", cmd_deepdive))
     app.add_handler(CommandHandler("dd", cmd_deepdive))
     app.add_handler(CommandHandler("pulse", cmd_pulse))
