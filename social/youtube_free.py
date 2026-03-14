@@ -39,24 +39,31 @@ YT_DLP = Path(__file__).parents[1] / "venv" / "bin" / "yt-dlp"
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 SONNET_MODEL = "claude-sonnet-4-20250514"
 
-ANALYSIS_PROMPT = """Analyze this crypto/markets video transcript. Extract as JSON with these sections:
+ANALYSIS_PROMPT = """You are extracting intelligence from a crypto/markets video for a portfolio manager. ATTRIBUTE EVERY CLAIM TO THE SPEAKER. Extract EXACT NUMBERS. Focus on DISAGREEMENTS between hosts.
+
+Return JSON with these fields:
 
 - title: video title
 - channel: channel name
-- summary: 3-5 sentence summary focusing on WHAT CHANGED and WHAT TO DO
-- key_calls: [{claim: "specific claim with numbers", confidence: "high/medium/low", time_horizon: "days/weeks/months"}] — e.g. "Fed will cut 3 times in 2026", "oil to $120 if Iran escalates", "BTC bottom at $50K by Q3"
-- tokens_mentioned: [{symbol, sentiment (bullish/bearish/neutral), conviction (1-10), price_target (number or null), entry_level (number or null), reasoning: "one sentence WHY", personal_action: "bought/sold/holding/none"}]
-- macro_data: [{metric: "PMI/CPI/rates/liquidity/DXY/oil", value: "specific number", direction: "rising/falling/flat", impact: "one sentence market impact"}]
-- geopolitical: [{event, market_impact: "2nd/3rd order effect on crypto", severity: "high/medium/low"}]
-- disagreements: [{topic, view_a: "host A says...", view_b: "host B says...", edge: "where the edge might be"}]
-- risk_warnings: [specific warnings with levels/dates, not generic]
+- summary: 4-6 sentences. WHO said WHAT. Include the most important numbers and predictions. Not generic — specific.
+- key_calls: [{who: "speaker name", claim: "exact claim with numbers — e.g. 'oil back to $85 in 60 days'", confidence: "high/medium/low", time_horizon: "specific — e.g. '60 days' or 'by Q3 2026'"}] — MUST include every specific prediction with a number or timeframe
+- tokens_mentioned: [{symbol, who: "speaker name", sentiment, conviction (1-10), price_target (number or null), entry_level (number or null), reasoning: "what they actually said", personal_action: "bought/sold/holding/none"}] — watchlist: BTC, SOL, JUP, HYPE, RENDER, BONK, PUMP, PENGU, FARTCOIN, MSTR
+- macro_data: [{metric, value: "exact number from video", who: "who cited it", direction, impact: "2nd order market effect"}] — capture EVERY number: oil price, PCE, GDP, PE ratios, Polymarket odds, rate expectations
+- geopolitical: [{event, who: "speaker name", their_take: "what they specifically argued — not generic", market_impact: "2nd/3rd order effect on crypto and risk assets", severity}]
+- disagreements: [{topic, side_a: "Name: their specific argument with reasoning", side_b: "Name: their counter-argument", investment_edge: "which side has better data and why"}] — THIS IS THE MOST VALUABLE SECTION. Capture every disagreement.
+- risk_warnings: [{warning: "specific risk with numbers/dates", severity, who: "who raised it"}]
 - overall_outlook: bullish/bearish/neutral
-- relevance_score: 1-10 (how actionable for our watchlist: BTC, SOL, JUP, HYPE, RENDER, BONK, PUMP, PENGU, FARTCOIN)
-- portfolio_impact: "one specific sentence on what to do differently based on this video"
+- relevance_score: 1-10
+- portfolio_impact: "2-3 sentences. Map to specific actions: which tokens affected, how deployment % should change, what to watch for. e.g. 'Oil at $100 + PCE 2.9% = Fed June cut unlikely. Extends bear timeline. Revenue tokens (HYPE, JUP) less affected. Meme tokens vulnerable to risk-off. Keep dry powder 50%+.'"
 
-Respond ONLY in valid JSON (no markdown, no code fences).
-Keep each string value under 200 characters. Be specific but concise.
-If a field has no data, use null or empty array [].
+CRITICAL RULES:
+- Every claim MUST name WHO said it
+- Every number mentioned MUST be captured
+- Disagreements are MORE valuable than consensus
+- "Bullish on BTC" is USELESS. "Sacks: BTC to $90K by June, resilient as digital gold during Iran crisis" is USEFUL
+- portfolio_impact must reference our specific watchlist tokens
+
+Respond ONLY in valid JSON (no markdown, no code fences). If a field has no data, use null or [].
 
 Transcript:
 """
@@ -367,10 +374,10 @@ def _analyse_metadata(title: str, description: str, channel_name: str) -> dict |
                 },
                 json={
                     "model": model,
-                    "max_tokens": 4000,
+                    "max_tokens": 8000,
                     "messages": [{"role": "user", "content": prompt_text}],
                 },
-                timeout=60,
+                timeout=(10, 180),
             )
             resp.raise_for_status()
             data = resp.json()
@@ -406,6 +413,7 @@ def _analyse_transcript(transcript: str, video_title: str = "", channel_name: st
     HIGH_PRIORITY = {"All-In Podcast", "Real Vision", "Real Vision Finance",
                      "Benjamin Cowen", "Raoul Pal", "Lyn Alden"}
     model = SONNET_MODEL if channel_name in HIGH_PRIORITY else HAIKU_MODEL
+    log.info("Analysis model: %s for channel: %s", model, channel_name)
     if not ANTHROPIC_API_KEY:
         log.error("ANTHROPIC_API_KEY not set — cannot analyse")
         return None
@@ -429,16 +437,27 @@ def _analyse_transcript(transcript: str, video_title: str = "", channel_name: st
                     "content-type": "application/json",
                 },
                 json={
-                    "model": HAIKU_MODEL,
-                    "max_tokens": 2000,
+                    "model": model,
+                    "max_tokens": 8000,
                     "messages": [{"role": "user", "content": prompt_text}],
                 },
-                timeout=30,
+                timeout=(10, 180),
             )
             resp.raise_for_status()
             data = resp.json()
 
+            # Check for truncation
+            stop_reason = data.get("stop_reason", "unknown")
             text = data["content"][0]["text"]
+            log.debug("Claude output: %d chars, stop_reason=%s, model=%s", len(text), stop_reason, model)
+
+            if stop_reason != "end_turn":
+                log.warning("Claude response truncated (stop=%s), attempt %d", stop_reason, attempt + 1)
+                if attempt < 2:
+                    time.sleep(2 ** attempt)
+                    continue
+                return None
+
             # Strip markdown code fences if present
             text = re.sub(r"^```json\s*", "", text.strip())
             text = re.sub(r"\s*```$", "", text.strip())
