@@ -36,6 +36,12 @@ TIER_1 = [
     {"name": "Miles Deutscher", "handle": "@MilesDeutscher", "channel_id": "UCVVX-7tHff75fRAEEEnZiAQ"},
     {"name": "All-In Podcast", "handle": "@alaborofdave", "channel_id": "UCESLZhusAkFfsNsApnjF_Cg"},
     {"name": "Virtual Bacon", "handle": "@VirtualBacon", "channel_id": "UCcrBKMR8tZEXjjBJVvzNlYQ"},
+    {"name": "Diary of a CEO", "handle": "@TheDiaryOfACEO", "channel_id": "UCGq-a57w-aPwyi3pW7XLiHw"},
+    {"name": "Lex Fridman", "handle": "@lexfridman", "channel_id": "UCSHZKyawb77ixDdsGog4iWA"},
+    {"name": "PBD Podcast", "handle": "@PBDPodcast", "channel_id": "UCGX7nGXpz-CmO_Arg-cgJ7A"},
+    {"name": "Principles by Ray Dalio", "handle": "@principlesbyraydalio", "channel_id": "UCqvaXJ1K3HheTPNjH-KpwXQ"},
+    {"name": "Mark Moss", "handle": "@1MarkMoss", "channel_id": "UC9ZM3N0ybRtp44-WLqsW3iQ"},
+    {"name": "Colin Talks Crypto", "handle": "@ColinTalksCrypto", "channel_id": "UCnqJ2HjWhm7MbhgFHLUENfQ"},
     {"name": "Real Vision Finance", "handle": "@RealVisionFinance", "channel_id": "UCBH5VZE_Y4F3CMcPIzPEB5A"},
 ]
 
@@ -44,14 +50,29 @@ TIER_2 = [
     {"name": "Wolf of All Streets", "handle": "@ScottMelker", "channel_id": "UCxIU1RFIdDpvA8VOITswQ1A"},
     {"name": "CryptoCon", "handle": "@CryptoCon", "channel_id": "UCdoz_Hi--I26WH8sY2Qx3bg"},
     {"name": "Crypto Crew University", "handle": "@CryptoCrewUniversity", "channel_id": "UC7ndkZ4vViKiM7kVEgdrlZQ"},
+    {"name": "Paul Barron Network", "handle": "@PaulBarronNetwork", "channel_id": "UC4VPa7EOvObpyCRI4YKRQRw"},
+    {"name": "CryptosRUs", "handle": "@CryptosRUs", "channel_id": "UCI7M65p3A-D3P4v5qW8POxQ"},
+    {"name": "Gareth Soloway", "handle": "@GarethSoloway", "channel_id": "UCwTu6kD2igaLMpxswtcdxlg"},
+    {"name": "The Bitcoin Layer", "handle": "@TheBitcoinLayer", "channel_id": "UCDo6-SUypaXlTmH6AyrYBZA"},
+    {"name": "PlanB", "handle": "@100trillionUSD", "channel_id": "UCyTSwVh66Y2Ww_CIIHhuxbw"},
+    {"name": "Natalie Brunell", "handle": "@nataboron", "channel_id": "UCru3nlhzHrbgK21x0MdB_eg"},
+    {"name": "Digital Asset News", "handle": "@DigitalAssetNews", "channel_id": "UCJgHxpqfhWEEjYH9cLXqhIQ"},
+    {"name": "CTO Larsson", "handle": "@CTOLarsson", "channel_id": "UCFU-BE5HRJoudqIz1VDKlhQ"},
+    {"name": "Kitco NEWS", "handle": "@kitaboron", "channel_id": "UC9ijza42jVR3T6b8bColgvg"},
+    {"name": "Rekt Capital", "handle": "@RektCapital", "channel_id": "UCffNwA5OkxWEmruYFrWJsoQ"},
+    {"name": "Bob Loukas", "handle": "@BobLoukas", "channel_id": "UC0zGwzu0zzCImC1BwPuWyXQ"},
+    {"name": "Bitcoin Magazine", "handle": "@BitcoinMagazine", "channel_id": "UCtOV5M-T3GcsJAq8QKaf0lg"},
+    {"name": "Heresy Financial", "handle": "@HeresyFinancial", "channel_id": "UC4fg8o6oUkkZDLaC6eAZKwQ"},
+    {"name": "Crypto Insider", "handle": "@CryptoInsider", "channel_id": "UCSbyF4RwCk3AuGhYmykCGOQ"},
+    {"name": "British HODL", "handle": "@BritishHODL", "channel_id": "UCBGncGsI7pIDP64RYoM6rEg"},
     {"name": "Patrick Boyle", "handle": "@PBoyle", "channel_id": "UCASM0cgfkJxQ1ICmRilfHLw"},
 ]
 
 TIER_3_EXCLUDED = [
-    "Tom Bilyeu", "Lex Fridman", "Huberman", "Joe Rogan",
+    "Tom Bilyeu", "Huberman", "Joe Rogan",
     "Brian Jung", "Johnny Harris", "Dr Berg",
     "DLM Christian Lifestyle", "belvoir_london",
-    "Codie Sanchez", "Alex Hormozi", "Diary of a CEO", "Daily Stoic",
+    "Codie Sanchez", "Alex Hormozi", "Daily Stoic",
 ]
 
 

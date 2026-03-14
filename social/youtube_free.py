@@ -458,7 +458,9 @@ def _analyse_transcript(transcript: str, video_title: str = "", channel_name: st
                      "InvestAnswers", "Benjamin Cowen", "Coin Bureau",
                      "Virtual Bacon", "Bankless", "Crypto Crew University",
                      "Crypto Banter", "Raoul Pal", "Lyn Alden",
-                     "Lark Davis", "Wolf of All Streets"}
+                     "Lark Davis", "Wolf of All Streets",
+                     "Diary of a CEO", "Lex Fridman", "PBD Podcast",
+                     "Principles by Ray Dalio", "Mark Moss", "Colin Talks Crypto"}
 
     # Sonnet for all priority channels, Haiku for the rest. No keyword filter.
     model = SONNET_MODEL if channel_name in HIGH_PRIORITY else HAIKU_MODEL
