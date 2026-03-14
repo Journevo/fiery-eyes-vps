@@ -187,13 +187,23 @@ def send_telegram(text: str):
 
 
 def run_convergence_check(hours: int = 12, send_to_telegram: bool = False) -> list:
-    """Run convergence detection and optionally alert."""
+    """Run convergence detection. Logs to DB only — surfaces in daily report.
+    No individual Telegram alerts except genuine 3+ source watchlist convergence."""
     convergences = detect_convergence(hours)
 
+    # Only alert for genuine high-conviction convergence:
+    # 3+ sources AND watchlist token AND on-chain confirmation
     if convergences and send_to_telegram:
-        msg = format_convergence_telegram(convergences)
-        if msg:
-            send_telegram(msg)
+        for c in convergences:
+            if (c.get("type") == "CONVERGENCE"
+                and c.get("in_watchlist")
+                and c.get("x_signal_count", 0) >= 3
+                and c.get("chain_signal_count", 0) >= 1):
+                msg = format_convergence_telegram([c])
+                if msg:
+                    send_telegram(msg)
+                    log.info("Genuine convergence alert: %s (%d X + %d chain)",
+                             c["token"], c["x_signal_count"], c["chain_signal_count"])
 
     return convergences
 
