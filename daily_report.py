@@ -162,6 +162,41 @@ def generate_report(send_to_telegram: bool = False) -> str:
             swap_lines.append(f"{token}: {amount_str} {direction.lower()} on {pool} ({pct_mcap:.2f}% MCap) — {alert_type}")
         sections.append("\n━━━ <b>LARGE SWAPS (24h)</b> ━━━\n" + "\n".join(swap_lines))
 
+    # ━━━ DeFi MARKET ━━━
+    try:
+        from defi_llama import collect_defi_data
+        defi = collect_defi_data()
+        if defi and defi.get("total_tvl"):
+            def _fusd(v):
+                if v >= 1e12: return f"${v/1e12:.1f}T"
+                if v >= 1e9: return f"${v/1e9:.1f}B"
+                if v >= 1e6: return f"${v/1e6:.1f}M"
+                return f"${v:,.0f}"
+
+            sol_share = defi.get("sol_dex_share", 0)
+            sol_rank = defi.get("sol_tvl_rank", 0)
+
+            defi_lines = [f"\n━━━ <b>DeFi MARKET</b> ━━━"]
+            defi_lines.append(f"TVL: {_fusd(defi['total_tvl'])} | SOL {_fusd(defi['sol_tvl'])} (#{sol_rank})")
+            defi_lines.append(f"DEX Vol: {_fusd(defi['total_dex_vol_24h'])} | SOL share: {sol_share}%")
+
+            revs = defi.get("revenues", {})
+            rev_parts = []
+            for sym in ["HYPE", "JUP", "PUMP"]:
+                r = revs.get(sym, {})
+                if r.get("rev_24h"):
+                    rev_parts.append(f"{sym} {_fusd(r['rev_24h'])}/d")
+            if rev_parts:
+                defi_lines.append("Revenue: " + " | ".join(rev_parts))
+
+            stables = defi.get("total_stablecoins", 0)
+            if stables:
+                defi_lines.append(f"Stablecoins: {_fusd(stables)}")
+
+            sections.append("\n".join(defi_lines))
+    except Exception as e:
+        log.error("DeFi section failed: %s", e)
+
     # ━━━ REGIME ━━━
     bear_pct = cycle["bear_progress_pct"] if btc_price else 0
     if bear_pct < 60:

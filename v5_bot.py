@@ -180,6 +180,21 @@ async def cmd_sold(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Error: {e}")
 
 
+async def cmd_defi(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show DeFiLlama market data."""
+    await update.message.reply_text("Fetching DeFi data...")
+    try:
+        from defi_llama import run_defi_tracker, format_defi_telegram
+        data = run_defi_tracker()
+        if data:
+            await update.message.reply_text(format_defi_telegram(data), parse_mode="HTML")
+        else:
+            await update.message.reply_text("DeFi data unavailable")
+    except Exception as e:
+        log.error("/defi error: %s", e)
+        await update.message.reply_text("Error: " + str(e))
+
+
 async def cmd_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show recent X smart money signals."""
     try:
@@ -292,6 +307,11 @@ def _run_scheduled():
         except Exception as e:
             log.error("Daily report failed: %s", e)
         try:
+            from defi_llama import run_defi_tracker
+            run_defi_tracker()
+        except Exception as e:
+            log.error("Daily DeFi data failed: %s", e)
+        try:
             from rec_ledger import run_log_daily
             run_log_daily()
         except Exception as e:
@@ -339,6 +359,7 @@ def main():
     app.add_handler(CommandHandler("pnl", cmd_pnl))
     app.add_handler(CommandHandler("bought", cmd_bought))
     app.add_handler(CommandHandler("sold", cmd_sold))
+    app.add_handler(CommandHandler("defi", cmd_defi))
     app.add_handler(CommandHandler("signals", cmd_signals))
     app.add_handler(CommandHandler("convergence", cmd_convergence))
     app.add_handler(CommandHandler("help", cmd_help))
