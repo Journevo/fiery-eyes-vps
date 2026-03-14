@@ -1,0 +1,17 @@
+[Unit]
+Description=Fiery Eyes v5.1 — Intelligence Bot + Scheduler
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/fiery-eyes
+ExecStart=/opt/fiery-eyes/venv/bin/python v5_bot.py
+Restart=always
+RestartSec=30
+EnvironmentFile=/opt/fiery-eyes/.env
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fiery-eyes-v5
+
+[Install]
+WantedBy=multi-user.target
