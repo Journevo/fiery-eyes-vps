@@ -98,8 +98,7 @@ def generate_report(send_to_telegram: bool = False) -> str:
         layers = collect_all_layers()
         prompt = build_synthesis_prompt(layers)
         # Add instruction for brief output
-        prompt = prompt.replace("Keep total output under 500 words.",
-            "Keep total output under 200 words. ONLY sections 1 (NARRATIVE) and 5 (ACTIONABLE). Skip others.")
+        # Use full synthesis prompt — this is the main report narrative
         result = call_synthesis(prompt)
         if result.get("output"):
             synth_text = result["output"].strip()
@@ -109,6 +108,9 @@ def generate_report(send_to_telegram: bool = False) -> str:
             sections.append(f"\n━━━ <b>SYNTHESIS</b> ━━━\n{synth_text}")
     except Exception as e:
         log.error("Report synthesis failed: %s", e)
+
+    # ━━━ SUPPORTING DATA ━━━
+    sections.append("\n━━━ <b>SUPPORTING DATA</b> ━━━")
 
     # ━━━ BTC CYCLE ━━━
     if btc_price and cycle:

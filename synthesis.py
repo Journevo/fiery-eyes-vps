@@ -230,28 +230,34 @@ def build_synthesis_prompt(layers: dict) -> str:
 
     data_block = "\n\n".join(sections)
 
-    prompt = f"""You are the Fiery Eyes Synthesis Engine — a crypto intelligence system advising manual entry/exit decisions on a focused watchlist: JUP, HYPE, RENDER, BONK (core), with BTC/SOL as benchmarks.
+    prompt = f"""You are a senior crypto research analyst writing a morning briefing. Your reader holds positions in JUP, HYPE, RENDER, BONK on Solana, with BTC/SOL as benchmarks. They have 50%+ dry powder in USDC.
 
 Date: {today}
 
 COMPLETE SYSTEM STATE:
 {data_block}
 
-Produce a synthesis following this EXACT structure. Be specific, cite data, and be concise:
+Write a briefing that answers FOUR questions. Write like Matt Levine — insightful, specific, opinionated. NOT bullet points. Flowing analytical prose.
 
-1. NARRATIVE DETECTION: What 2-3 themes connect multiple signals? (e.g., "AI infrastructure accumulation", "DXY collapse setup", "extreme fear divergence from macro"). Name the narrative and cite which data points support it.
+1. WHAT IS HAPPENING
+Write a 4-5 sentence narrative connecting the most important signals. Not a data dump — a STORY. What is the market doing and why? Connect macro (oil, Fed, liquidity) to crypto (fear, funding, whale behaviour). Example tone: "Despite Iran war pushing oil to $100 and Goldman raising PCE to 2.9%, crypto is showing unexpected resilience — BTC held $70K while equities compressed from 24x to 21x PE. The divergence between extreme retail fear (F&G 16) and aggressive whale accumulation ($14.3M into RENDER across all timeframes) is the widest this cycle."
 
-2. CAUSAL CHAINS: What event → what consequence → what portfolio impact? Connect at least 2 chains. (e.g., "Funding negative + F&G 16 → local bottom forming → but bear only 42% so any bounce is temporary")
+2. MARKET IMPACT
+What does this MEAN for crypto over the next 1-4 weeks? Connect the dots between data points. Identify the bull case AND bear case for the current setup. What is the market not pricing in?
 
-3. REGIME CONTRADICTIONS: What disagrees? Be explicit. (e.g., "Macro says early expansion but cycle says 6 months of pain. Smart money buying but crowd fearish.")
+3. WHAT TO DO
+Specific actions mapped to the watchlist. For each relevant token:
+- ACCUMULATE / HOLD / PATIENCE / REDUCE / AVOID
+- WHY (cite the specific data: SunFlow conviction, smart money, supply dynamics)
+- AT WHAT LEVEL (entry targets if applicable)
+- THE RISK (what makes this wrong)
 
-4. WHAT CHANGED: Only deltas vs a week ago. What moved meaningfully? What's new information?
+4. OPPORTUNITIES & RISKS
+What is the market not seeing? Where is the asymmetric bet? What is the biggest risk to the portfolio right now?
 
-5. ACTIONABLE INSIGHT: One specific thing to do differently. Not "be patient" — something concrete like "Add 5% to RENDER if it drops below $1.50 given 4-timeframe whale accumulation" or "Reduce PUMP allocation by 10% — cliff penalty kicks in at 75 days."
+CRITICAL: Be opinionated. "Both sides have merit" is useless. Take a position based on the data and explain why. If RENDER has conviction 9 from whales, SAY it's the best opportunity and explain the risk that makes you wrong.
 
-6. WATCHLIST RANKING: Rank the 4 core tokens by conviction right now. For each: one sentence why, and the key risk.
-
-Respond in plain text, not JSON. Use the section headers above. Keep total output under 500 words."""
+Keep total output under 600 words. No headers with asterisks — use the section names above as plain text headers."""
 
     return prompt
 

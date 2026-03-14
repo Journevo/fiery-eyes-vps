@@ -335,6 +335,46 @@ def _fetch_video_metadata(video_id: str) -> dict | None:
     return None
 
 
+SONNET_ANALYSIS_PROMPT = """You are a senior research analyst writing a briefing for a crypto portfolio manager who holds JUP, HYPE, RENDER, BONK, SOL positions. Your job is NOT to list facts — it is to identify ARGUMENTS, TENSIONS, and IMPLICATIONS.
+
+Analyse this podcast/video transcript like a Matt Levine column: insightful, specific, opinionated, connecting dots to the portfolio.
+
+For each major topic discussed:
+- What is the BULL case? Who argued it and what evidence did they cite?
+- What is the BEAR case? Who argued against and what evidence did they cite?
+- What is the UNRESOLVED TENSION — the question they couldn't agree on?
+- What specific numbers or data points were cited by each side?
+- How does this connect to crypto markets, BTC, SOL, or AI infrastructure tokens like RENDER?
+
+CRITICAL RULES:
+- ATTRIBUTE every claim to the specific speaker by name
+- Capture EVERY number mentioned (prices, percentages, dates, valuations)
+- DISAGREEMENTS between hosts are the most valuable content
+- Cover EVERY segment of the episode — not just the first topic
+- Connect to the watchlist: JUP, HYPE, RENDER, BONK, PUMP, PENGU, FARTCOIN, SOL, BTC, MSTR
+- AI compute/revenue data is directly relevant to RENDER thesis
+
+Write a flowing analytical essay, NOT bullet points or JSON. Structure as:
+
+SUMMARY (3-4 sentences — the key takeaways a busy investor needs)
+
+SEGMENT 1: [topic name]
+The bull/bear tension, who argued what, key numbers, market implications.
+
+SEGMENT 2: [topic name]
+(repeat for each major segment)
+
+KEY NUMBERS (every specific number mentioned, attributed to speaker)
+
+PORTFOLIO IMPACT
+How should a crypto investor positioned in JUP, HYPE, RENDER, BONK, SOL adjust their thinking? Be specific — "bullish RENDER" is useless, "Anthropic $14B run rate validates compute demand, supports RENDER thesis at -87% ATH" is useful.
+
+Video title: {title}
+Channel: {channel}
+
+Transcript:
+"""
+
 METADATA_ANALYSIS_PROMPT = """Analyze this crypto/markets YouTube video based on its title and description only (no transcript available).
 Extract as JSON:
 - summary: 1-2 sentence summary based on title/description
@@ -424,20 +464,25 @@ def _analyse_transcript(transcript: str, video_title: str = "", channel_name: st
         log.error("ANTHROPIC_API_KEY not set — cannot analyse")
         return None
 
-    # Sonnet channels: send FULL transcript (200K context handles it)
+    # Sonnet channels: COMPLETE transcript, zero truncation
     # Haiku channels: truncate to 12K chars
     if channel_name in HIGH_PRIORITY:
-        # No truncation — send everything. Cost ~$0.30-0.50/video, worth it.
-        log.info("Full transcript: %d chars for %s (Sonnet)", len(transcript), channel_name)
+        log.info("Full transcript: %d chars for %s (Sonnet, no truncation)", len(transcript), channel_name)
     else:
         max_chars = 12000
         if len(transcript) > max_chars:
             transcript = transcript[:10000] + "\n[...TRUNCATED...]\n" + transcript[-2000:]
             log.info("Transcript truncated to %d chars (Haiku)", max_chars)
 
-    prompt_text = ANALYSIS_PROMPT + transcript
-    if video_title:
-        prompt_text = f"Video title: {video_title}\n\n" + prompt_text
+    # Different prompts for different models
+    if channel_name in HIGH_PRIORITY:
+        # Sonnet: analytical essay format
+        prompt_text = SONNET_ANALYSIS_PROMPT.format(title=video_title, channel=channel_name) + transcript
+    else:
+        # Haiku: structured JSON extraction
+        prompt_text = ANALYSIS_PROMPT + transcript
+        if video_title:
+            prompt_text = f"Video title: {video_title}\n\n" + prompt_text
 
     for attempt in range(3):
         try:
@@ -461,7 +506,7 @@ def _analyse_transcript(transcript: str, video_title: str = "", channel_name: st
             # Check for truncation
             stop_reason = data.get("stop_reason", "unknown")
             text = data["content"][0]["text"]
-            log.debug("Claude output: %d chars, stop_reason=%s, model=%s", len(text), stop_reason, model)
+            log.info("Claude output: %d chars, stop_reason=%s, model=%s", len(text), stop_reason, model)
 
             if stop_reason != "end_turn":
                 log.warning("Claude response truncated (stop=%s), attempt %d", stop_reason, attempt + 1)
@@ -470,7 +515,20 @@ def _analyse_transcript(transcript: str, video_title: str = "", channel_name: st
                     continue
                 return None
 
-            # Strip markdown code fences if present
+            # Sonnet essay format — return as dict with summary text
+            if channel_name in HIGH_PRIORITY:
+                return {
+                    "title": video_title,
+                    "channel": channel_name,
+                    "summary": text,
+                    "tokens_mentioned": [],  # Will be extracted from text below
+                    "overall_outlook": "neutral",
+                    "relevance_score": 8,  # Priority channels always high relevance
+                    "portfolio_impact": "",
+                    "_essay_format": True,
+                }
+
+            # Haiku JSON format — parse as before
             text = re.sub(r"^```json\s*", "", text.strip())
             text = re.sub(r"\s*```$", "", text.strip())
 
