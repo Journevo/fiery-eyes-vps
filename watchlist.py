@@ -359,6 +359,28 @@ def run_watchlist(send_to_telegram: bool = False) -> dict:
     if send_to_telegram:
         send_telegram(msg)
 
+    # MSTR mNAV alert — below 1.0 is historically strong buy
+    if "MSTR" in prices and "BTC" in prices:
+        mnav = calc_mstr_mnav(prices["MSTR"]["price"], prices["BTC"]["price"], prices["MSTR"]["mcap"])
+        if mnav and mnav < 1.0:
+            # Check if we already alerted recently
+            from db.connection import execute_one
+            recent = execute_one(
+                "SELECT 1 FROM watchlist_status WHERE token = 'MSTR_MNAV_ALERT' AND timestamp > NOW() - INTERVAL '24 hours'"
+            )
+            if not recent:
+                alert = (
+                    f"\U0001F6A8 <b>MSTR mNAV ALERT</b>\n"
+                    f"mNAV: {mnav} (BELOW 1.0)\n"
+                    f"MSTR: ${prices['MSTR']['price']:.2f} | BTC: ${prices['BTC']['price']:,.0f}\n"
+                    f"Historically a strong buy signal — trading below BTC book value\n"
+                    f"IMPACT: ISA opportunity — MSTR at discount to underlying BTC holdings"
+                )
+                send_telegram(alert)
+                from db.connection import execute as db_exec
+                db_exec("INSERT INTO watchlist_status (token, price, zone, timestamp) VALUES ('MSTR_MNAV_ALERT', %s, 'alert', NOW())", (mnav,))
+                log.info("MSTR mNAV alert sent: %.2f", mnav)
+
     return prices
 
 

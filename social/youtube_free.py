@@ -39,15 +39,20 @@ YT_DLP = Path(__file__).parents[1] / "venv" / "bin" / "yt-dlp"
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 SONNET_MODEL = "claude-sonnet-4-20250514"
 
-ANALYSIS_PROMPT = """Analyze this crypto/markets video transcript. Extract as JSON:
+ANALYSIS_PROMPT = """Analyze this crypto/markets video transcript. Extract as JSON with these sections:
+
 - title: video title
 - channel: channel name
-- summary: 2-3 sentence summary of key points
-- tokens_mentioned: [{symbol, sentiment (bullish/bearish/neutral), conviction (1-10), price_target (if mentioned)}]
-- key_insights: [list of actionable insights, max 5]
-- risk_warnings: [any warnings or bearish signals mentioned]
+- summary: 3-5 sentence summary focusing on WHAT CHANGED and WHAT TO DO
+- key_calls: [{claim: "specific claim with numbers", confidence: "high/medium/low", time_horizon: "days/weeks/months"}] — e.g. "Fed will cut 3 times in 2026", "oil to $120 if Iran escalates", "BTC bottom at $50K by Q3"
+- tokens_mentioned: [{symbol, sentiment (bullish/bearish/neutral), conviction (1-10), price_target (number or null), entry_level (number or null), reasoning: "one sentence WHY", personal_action: "bought/sold/holding/none"}]
+- macro_data: [{metric: "PMI/CPI/rates/liquidity/DXY/oil", value: "specific number", direction: "rising/falling/flat", impact: "one sentence market impact"}]
+- geopolitical: [{event, market_impact: "2nd/3rd order effect on crypto", severity: "high/medium/low"}]
+- disagreements: [{topic, view_a: "host A says...", view_b: "host B says...", edge: "where the edge might be"}]
+- risk_warnings: [specific warnings with levels/dates, not generic]
 - overall_outlook: bullish/bearish/neutral
-- relevance_score: 1-10 (how actionable is this for meme/DeFi trading)
+- relevance_score: 1-10 (how actionable for our watchlist: BTC, SOL, JUP, HYPE, RENDER, BONK, PUMP, PENGU, FARTCOIN)
+- portfolio_impact: "one specific sentence on what to do differently based on this video"
 
 Respond ONLY in valid JSON (no markdown, no code fences).
 

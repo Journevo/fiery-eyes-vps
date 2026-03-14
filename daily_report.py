@@ -57,6 +57,16 @@ def generate_report(send_to_telegram: bool = False) -> str:
     sections = []
     sections.append(f"🌙 <b>FIERY EYES — {date_str}</b>\n")
 
+    # ━━━ NIMBUS STALENESS ━━━
+    try:
+        from nimbus_check import check_nimbus_staleness, format_nimbus_warning
+        nimbus = check_nimbus_staleness(btc_price)
+        nimbus_warn = format_nimbus_warning(nimbus)
+        if nimbus_warn:
+            sections.append(nimbus_warn)
+    except Exception as e:
+        log.error("Nimbus check failed: %s", e)
+
     # ━━━ BTC CYCLE ━━━
     btc_price = fetch_btc_price()
     if btc_price:

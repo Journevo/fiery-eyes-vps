@@ -90,6 +90,17 @@ def generate_pulse() -> str:
     except Exception as e:
         log.error("Pulse watchlist failed: %s", e)
 
+    # Liquidity one-liner
+    try:
+        from liquidity import fetch_dxy
+        dxy = fetch_dxy()
+        if dxy:
+            from market_structure import fetch_fear_greed as _fg2
+            # Already have F&G above, just add DXY to the line
+            pass
+    except Exception:
+        pass
+
     # Smart money (count only)
     try:
         row = execute("""
