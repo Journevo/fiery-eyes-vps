@@ -224,6 +224,15 @@ def generate_report(send_to_telegram: bool = False) -> str:
     except Exception as e:
         log.error("DeFi section failed: %s", e)
 
+    # ━━━ SUPPLY FLOW ━━━
+    try:
+        from supply_flow import calc_hype_supply_flow, calc_pump_cliff, format_supply_for_report
+        hype_flow = calc_hype_supply_flow()
+        pump_cliff = calc_pump_cliff()
+        sections.append("\n━━━ <b>SUPPLY FLOW</b> ━━━\n" + format_supply_for_report(hype_flow, pump_cliff))
+    except Exception as e:
+        log.error("Supply flow section failed: %s", e)
+
     # ━━━ YOUTUBE ━━━
     try:
         from youtube_intel import get_recent_youtube_intel, format_youtube_for_report
