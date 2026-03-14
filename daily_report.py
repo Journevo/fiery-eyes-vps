@@ -249,6 +249,16 @@ def generate_report(send_to_telegram: bool = False) -> str:
     except Exception as e:
         log.error("YouTube section failed: %s", e)
 
+    # ━━━ DRY POWDER ━━━
+    try:
+        from dry_powder import fetch_usdc_yields, format_for_report
+        yields = fetch_usdc_yields()
+        yield_line = format_for_report(yields)
+        if yield_line:
+            sections.append("\n━━━ <b>DRY POWDER</b> ━━━\n" + yield_line)
+    except Exception as e:
+        log.error("Dry powder section failed: %s", e)
+
     # ━━━ REGIME ━━━
     bear_pct = cycle["bear_progress_pct"] if btc_price else 0
     if bear_pct < 60:

@@ -180,6 +180,17 @@ async def cmd_sold(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Error: {e}")
 
 
+async def cmd_yields(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show USDC yield opportunities."""
+    try:
+        from dry_powder import run_yield_monitor, format_yields_telegram
+        yields = run_yield_monitor()
+        await update.message.reply_text(format_yields_telegram(yields), parse_mode="HTML")
+    except Exception as e:
+        log.error("/yields error: %s", e)
+        await update.message.reply_text("Error: " + str(e))
+
+
 async def cmd_scores(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show auto-updated token scores."""
     try:
@@ -382,6 +393,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/portfolio — positions vs targets\n"
         "/pnl — unrealised PnL\n\n"
         "<b>Research:</b>\n"
+        "/yields \u2014 USDC yield opportunities\n"
         "/scores \u2014 auto-updated token scores\n"
         "/deepdive CA \u2014 full token analysis\n"
         "\n"
@@ -536,6 +548,7 @@ def main():
     app.add_handler(CommandHandler("pnl", cmd_pnl))
     app.add_handler(CommandHandler("bought", cmd_bought))
     app.add_handler(CommandHandler("sold", cmd_sold))
+    app.add_handler(CommandHandler("yields", cmd_yields))
     app.add_handler(CommandHandler("scores", cmd_scores))
     app.add_handler(CommandHandler("deepdive", cmd_deepdive))
     app.add_handler(CommandHandler("dd", cmd_deepdive))
