@@ -37,6 +37,18 @@ TOKENS = {
         "address": "0x0000000000000000000000000000000000000001",  # placeholder
         "chain": "hyperliquid",
     },
+    "PUMP": {
+        "address": "AxriGVpPDsouQP6SbCxm8bHLDzSerBgkMNRTmhSkpump",
+        "chain": "solana",
+    },
+    "FARTCOIN": {
+        "address": "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump",
+        "chain": "solana",
+    },
+    "PENGU": {
+        "address": "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv",
+        "chain": "solana",
+    },
 }
 
 # Minimum swap size to track (USD)

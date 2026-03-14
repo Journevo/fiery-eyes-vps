@@ -18,7 +18,7 @@ from db.connection import execute
 log = get_logger("youtube_intel")
 
 # v5.1 watchlist tokens
-WATCHLIST = {"BTC", "SOL", "JUP", "HYPE", "RENDER", "BONK", "MSTR", "COIN"}
+WATCHLIST = {"BTC", "SOL", "JUP", "HYPE", "RENDER", "BONK", "PUMP", "PENGU", "FARTCOIN", "MSTR", "COIN"}
 
 # Minimum conviction to surface in report
 MIN_CONVICTION_REPORT = 7

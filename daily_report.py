@@ -13,12 +13,14 @@ log = get_logger("daily_report")
 
 # Token allocation targets (of deployed capital)
 ALLOCATION_TARGETS = {
-    "JUP": 25, "HYPE": 20, "RENDER": 17, "BONK": 15,
+    "JUP": 20, "HYPE": 20, "RENDER": 17, "BONK": 15,
+    "PUMP": 10, "PENGU": 8, "FARTCOIN": 5,
 }
 
 # Estimated beta to BTC (for downside calculation)
 BTC_BETA = {
     "JUP": 1.5, "HYPE": 1.2, "RENDER": 1.5, "BONK": 1.8,
+    "PUMP": 2.0, "PENGU": 1.8, "FARTCOIN": 2.5,
     "SOL": 1.3, "MSTR": 1.0, "COIN": 0.8,
 }
 

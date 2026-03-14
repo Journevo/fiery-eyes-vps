@@ -17,7 +17,7 @@ from db.connection import execute
 log = get_logger("convergence")
 
 # Watchlist tokens we care about for convergence
-WATCHLIST_SYMBOLS = {"JUP", "HYPE", "RENDER", "BONK", "SOL"}
+WATCHLIST_SYMBOLS = {"JUP", "HYPE", "RENDER", "BONK", "SOL", "PUMP", "PENGU", "FARTCOIN"}
 
 
 def detect_convergence(hours: int = 12) -> list:

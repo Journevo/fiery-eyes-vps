@@ -378,7 +378,7 @@ def _store_signal(handle: str, tweet_id: str, tweet_text: str,
 
 
 # v5.1 watchlist tokens — only these get immediate alerts (unless huge)
-_WATCHLIST_SYMBOLS = {"JUP", "HYPE", "RENDER", "BONK", "SOL", "BTC"}
+_WATCHLIST_SYMBOLS = {"JUP", "HYPE", "RENDER", "BONK", "SOL", "BTC", "PUMP", "PENGU", "FARTCOIN"}
 _ALERT_MIN_USD_NON_WATCHLIST = 5_000_000  # $5M minimum for non-watchlist alerts
 
 

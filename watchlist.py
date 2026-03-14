@@ -24,6 +24,9 @@ TOKENS = {
     "HYPE": {"cg_id": "hyperliquid", "ath": 59},
     "RENDER": {"cg_id": "render-token", "ath": 13.59},
     "BONK": {"cg_id": "bonk", "ath": 0.000059},
+    "PUMP": {"cg_id": "pump-fun", "ath": 0.025},
+    "PENGU": {"cg_id": "pudgy-penguins", "ath": 0.05},
+    "FARTCOIN": {"cg_id": "fartcoin", "ath": 2.64},
 }
 
 # Stock tickers fetched via yfinance (not on CoinGecko)
@@ -37,6 +40,8 @@ MSTR_BTC_HELD = 713502
 MSTR_AVG_COST = 76052
 
 CORE_TOKENS = ["JUP", "HYPE", "RENDER", "BONK"]
+SATELLITE_TOKENS = ["PUMP", "PENGU"]
+LOTTERY_TOKENS = ["FARTCOIN"]
 ISA_TOKENS = ["MSTR", "COIN"]
 
 
@@ -259,6 +264,22 @@ def format_watchlist_telegram(prices: dict) -> str:
             continue
         d = prices[symbol]
         chg = f"{d['change_24h']:+.0f}%" if d["change_24h"] else "—"
+        lines.append(f"{symbol:<8s} {_fmt_price(d['price']):>9s}   {chg:>5s}    {d['pct_from_ath']:+.0f}%   {d['zone']}")
+
+    # Satellite tokens
+    for symbol in SATELLITE_TOKENS:
+        if symbol not in prices:
+            continue
+        d = prices[symbol]
+        chg = f"{d['change_24h']:+.0f}%" if d["change_24h"] else "\u2014"
+        lines.append(f"{symbol:<8s} {_fmt_price(d['price']):>9s}   {chg:>5s}    {d['pct_from_ath']:+.0f}%   {d['zone']}")
+
+    # Lottery tokens
+    for symbol in LOTTERY_TOKENS:
+        if symbol not in prices:
+            continue
+        d = prices[symbol]
+        chg = f"{d['change_24h']:+.0f}%" if d["change_24h"] else "\u2014"
         lines.append(f"{symbol:<8s} {_fmt_price(d['price']):>9s}   {chg:>5s}    {d['pct_from_ath']:+.0f}%   {d['zone']}")
 
     # ISA proxies
