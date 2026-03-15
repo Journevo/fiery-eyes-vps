@@ -438,7 +438,7 @@ async def cmd_analyse(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if result and result.get("_essay_format"):
             text = result["summary"]
-            header = f"\U0001f4fa <b>VIDEO ANALYSIS</b>\n<i>{title}</i>\n\n"
+            header = f"\U0001f4fa <b>VIDEO ANALYSIS</b>\n\U0001f3ac \"{title}\"\n\n"
             full = header + text
 
             # Split at paragraphs

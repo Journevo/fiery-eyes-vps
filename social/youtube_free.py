@@ -39,7 +39,7 @@ YT_DLP = Path(__file__).parents[1] / "venv" / "bin" / "yt-dlp"
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 SONNET_MODEL = "claude-sonnet-4-20250514"
 
-ANALYSIS_PROMPT = """You are extracting intelligence from a crypto/markets video for a portfolio manager. ATTRIBUTE EVERY CLAIM TO THE SPEAKER. Extract EXACT NUMBERS. Focus on DISAGREEMENTS between hosts.
+ANALYSIS_PROMPT = """You are analysing a video for a crypto investor. NEVER refuse — every video gets analysed regardless of topic. ATTRIBUTE EVERY CLAIM TO THE SPEAKER. Extract EXACT NUMBERS. Focus on DISAGREEMENTS between hosts.
 
 Return JSON with these fields:
 
@@ -335,39 +335,39 @@ def _fetch_video_metadata(video_id: str) -> dict | None:
     return None
 
 
-SONNET_ANALYSIS_PROMPT = """You are a senior research analyst writing a briefing for a crypto portfolio manager who holds JUP, HYPE, RENDER, BONK, SOL positions. Your job is NOT to list facts — it is to identify ARGUMENTS, TENSIONS, and IMPLICATIONS.
+SONNET_ANALYSIS_PROMPT = """You are analysing a video/podcast for a crypto investor. NEVER refuse to analyse. EVERY video gets a full summary regardless of topic.
 
-Analyse this podcast/video transcript like a Matt Levine column: insightful, specific, opinionated, connecting dots to the portfolio.
+TWO LAYERS — both required:
 
-For each major topic discussed:
-- What is the BULL case? Who argued it and what evidence did they cite?
-- What is the BEAR case? Who argued against and what evidence did they cite?
-- What is the UNRESOLVED TENSION — the question they couldn't agree on?
-- What specific numbers or data points were cited by each side?
-- How does this connect to crypto markets, BTC, SOL, or AI infrastructure tokens like RENDER?
+LAYER 1 — SUMMARY (always, every video, no exceptions):
+Cover EVERY segment/topic discussed. For each:
+- What was argued and by whom (attribute every claim to the speaker)
+- Every specific number mentioned (prices, %, dates, valuations, odds)
+- Where did speakers DISAGREE? (most valuable content)
+- Predictions with timeframes
 
-CRITICAL RULES:
-- ATTRIBUTE every claim to the specific speaker by name
-- Capture EVERY number mentioned (prices, percentages, dates, valuations)
-- DISAGREEMENTS between hosts are the most valuable content
-- Cover EVERY segment of the episode — not just the first topic
-- Connect to the watchlist: JUP, HYPE, RENDER, BONK, PUMP, PENGU, FARTCOIN, SOL, BTC, MSTR
-- AI compute/revenue data is directly relevant to RENDER thesis
+Even non-crypto content is valuable: geopolitical = risk sentiment, AI research = compute thesis, economics = macro framework.
 
-Write a flowing analytical essay, NOT bullet points or JSON. Structure as:
+LAYER 2 — MARKET ANALYSIS (on top of summary):
+- 2nd and 3rd order effects on financial markets
+- How does this affect crypto specifically?
+- Does this change anything for watchlist tokens: BTC, SOL, JUP, HYPE, RENDER, BONK, PUMP, PENGU, FARTCOIN, MSTR?
+- AI/compute content → RENDER thesis. Macro/rates → cycle timing. Geopolitical → risk sentiment.
+- If connection is indirect, say so honestly: "Indirect — [explanation]"
+- If genuinely zero market connection: "None identified"
 
-SUMMARY (3-4 sentences — the key takeaways a busy investor needs)
+FORMAT (use exactly this structure):
 
-SEGMENT 1: [topic name]
-The bull/bear tension, who argued what, key numbers, market implications.
+SUMMARY:
+[Detailed flowing analysis of ALL segments. Attribute every claim. Capture every number. Focus on disagreements.]
 
-SEGMENT 2: [topic name]
-(repeat for each major segment)
+MARKET ANALYSIS:
+[2nd/3rd order effects. Crypto implications. Watchlist token connections.]
 
-KEY NUMBERS (every specific number mentioned, attributed to speaker)
+PORTFOLIO IMPACT:
+[One specific line — what does this mean for positions in JUP, HYPE, RENDER, BONK, SOL?]
 
-PORTFOLIO IMPACT
-How should a crypto investor positioned in JUP, HYPE, RENDER, BONK, SOL adjust their thinking? Be specific — "bullish RENDER" is useless, "Anthropic $14B run rate validates compute demand, supports RENDER thesis at -87% ATH" is useful.
+CRITICAL: Cover the ENTIRE video — every segment, every topic. Never skip content because it "isn't about crypto." Never refuse.
 
 Video title: {title}
 Channel: {channel}
@@ -951,7 +951,7 @@ def process_video(channel_name: str, video: dict) -> dict | None:
     except Exception as e:
         log.error("DB insert failed for %s: %s", video_id, e)
 
-    # Send individual alert — only Sonnet analyses or watchlist-relevant Haiku
+    # Send Sonnet analyses always. Haiku only if watchlist mention >=7 conviction.
     _watchlist_yt = {"BTC", "SOL", "JUP", "HYPE", "RENDER", "BONK", "PUMP", "PENGU", "FARTCOIN", "MSTR"}
     is_sonnet = analysis.get("_essay_format", False)
     has_watchlist = any(
@@ -960,9 +960,55 @@ def process_video(channel_name: str, video: dict) -> dict | None:
         if isinstance(t, dict) and t.get("conviction", 0) >= 7
     )
     if is_sonnet or has_watchlist:
-        _send_video_alert(channel_name, video_title, video_url, published_at, analysis)
+        # Build timestamped header
+        pub_str = ""
+        if published_at:
+            try:
+                from datetime import datetime
+                if isinstance(published_at, str):
+                    pub_dt = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+                else:
+                    pub_dt = published_at
+                pub_str = pub_dt.strftime("%a %-d %b %Y, %H:%M UTC")
+            except Exception:
+                pub_str = str(published_at)[:19]
+
+        header = f"\U0001f4fa <b>{channel_name}</b>"
+        if pub_str:
+            header += f"\n\U0001f4c5 {pub_str}"
+        header += f"\n\U0001f3ac \"{video_title}\""
+
+        if is_sonnet:
+            # Send full essay with header
+            essay = analysis.get("summary", "")
+            full_msg = header + "\n\n" + essay
+
+            # Split at paragraphs
+            max_len = 4000
+            if len(full_msg) <= max_len:
+                chunks = [full_msg]
+            else:
+                chunks = []
+                current = header + "\n\n"
+                for para in essay.split("\n\n"):
+                    if current and len(current) + len(para) + 2 > max_len:
+                        chunks.append(current)
+                        current = ""
+                    current = current + "\n\n" + para if current else para
+                if current:
+                    chunks.append(current)
+
+            import requests as req
+            from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+            for chunk in chunks:
+                req.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                    json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk,
+                          "parse_mode": "HTML", "disable_web_page_preview": True}, timeout=15)
+            log.info("YouTube Sonnet analysis sent: %s (%d chars)", video_title[:50], len(essay))
+        else:
+            _send_video_alert(channel_name, video_title, video_url, published_at, analysis)
     else:
-        log.debug("Skipping YouTube alert for %s — not Sonnet and no high-conviction watchlist mention", video_title[:50])
+        log.debug("Skipping YouTube alert for %s — Haiku, no high-conviction watchlist mention", video_title[:50])
 
     return {
         "video_id": video_id,
