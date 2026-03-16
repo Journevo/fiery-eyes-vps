@@ -417,7 +417,7 @@ def _analyse_metadata(title: str, description: str, channel_name: str) -> dict |
                     "content-type": "application/json",
                 },
                 json={
-                    "model": model,
+                    "model": HAIKU_MODEL,
                     "max_tokens": 8000,
                     "messages": [{"role": "user", "content": prompt_text}],
                 },
@@ -885,7 +885,7 @@ def _send_daily_digest(digest: dict, analyses: list[dict]):
 # Main pipeline
 # ---------------------------------------------------------------------------
 
-def process_video(channel_name: str, video: dict) -> dict | None:
+def process_video(channel_name: str, video: dict, send_alert: bool = True) -> dict | None:
     """Process a single video: download captions → analyse → store → alert."""
     video_id = video["video_id"]
     video_url = video["url"]
@@ -998,15 +998,19 @@ def process_video(channel_name: str, video: dict) -> dict | None:
                 if current:
                     chunks.append(current)
 
-            import requests as req
-            from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-            for chunk in chunks:
-                req.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-                    json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk,
-                          "parse_mode": "HTML", "disable_web_page_preview": True}, timeout=15)
-            log.info("YouTube Sonnet analysis sent: %s (%d chars)", video_title[:50], len(essay))
+            if send_alert:
+                import requests as req
+                from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+                for chunk in chunks:
+                    req.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                        json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk,
+                              "parse_mode": "HTML", "disable_web_page_preview": True}, timeout=15)
+                log.info("YouTube Sonnet analysis sent: %s (%d chars)", video_title[:50], len(essay))
+            else:
+                log.info("YouTube Sonnet analysis stored (no send): %s", video_title[:50])
         else:
-            _send_video_alert(channel_name, video_title, video_url, published_at, analysis)
+            if send_alert:
+                _send_video_alert(channel_name, video_title, video_url, published_at, analysis)
     else:
         log.debug("Skipping YouTube alert for %s — Haiku, no high-conviction watchlist mention", video_title[:50])
 
@@ -1018,8 +1022,13 @@ def process_video(channel_name: str, video: dict) -> dict | None:
     }
 
 
-def run_youtube_scan():
-    """Main entry: scan all channels for new videos, process each."""
+def run_youtube_scan(send_alerts: bool = True):
+    """Main entry: scan all channels for new videos, process each.
+
+    Args:
+        send_alerts: If False, analyse and store but don't send individual Telegram messages.
+                     Used by scheduled scan — best findings surface in Morning/Evening reports.
+    """
     log.info("=== YouTube Channel Scan ===")
 
     if YOUTUBE_PROXY_URL:
@@ -1063,7 +1072,7 @@ def run_youtube_scan():
             if _is_processed(video["video_id"]):
                 continue
 
-            result = process_video(name, video)
+            result = process_video(name, video, send_alert=send_alerts)
             if result:
                 results.append(result)
 
@@ -1074,7 +1083,7 @@ def run_youtube_scan():
         time.sleep(1)
 
     log.info("YouTube scan complete: %d new videos processed", len(results))
-    return results
+    return {"new_videos": len(results), "results": results}
 
 
 def run_daily_digest():

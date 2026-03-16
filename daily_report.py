@@ -11,6 +11,14 @@ from db.connection import execute
 
 log = get_logger("daily_report")
 
+# Persistent keyboard for Telegram messages
+_KEYBOARD_JSON = {
+    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+
+
 # Token allocation targets (of deployed capital)
 ALLOCATION_TARGETS = {
     "JUP": 20, "HYPE": 20, "RENDER": 17, "BONK": 15,
@@ -200,6 +208,32 @@ def generate_report(send_to_telegram: bool = False, report_type: str = "morning"
             f"<b>MED:</b> Global ${liq.get('global_net_liq', 0):.2f}T | M2 {m2_str} | lag {m2_days}d {m2_status}{m2_context}\n"
             f"<b>LONG:</b> DXY {dxy_str} | {alignment}"
         )
+
+    # ━━━ WUKONG REGIME ━━━
+    try:
+        from nimbus_sync import format_regime_for_report, get_nimbus_section
+        regime_section = format_regime_for_report()
+        if regime_section:
+            sections.append("\n━━━ " + regime_section)
+
+        # Add key macro context from Nimbus
+        nimbus_pmi = get_nimbus_section("pmi")
+        nimbus_rates = get_nimbus_section("rates")
+        nimbus_geo = get_nimbus_section("geopolitics")
+        macro_parts = []
+        if nimbus_pmi:
+            gw = nimbus_pmi.get("global_weighted", [])
+            if gw:
+                macro_parts.append(f"Global PMI {gw[-1]}")
+        if nimbus_rates:
+            fed = nimbus_rates.get("fed", {})
+            macro_parts.append(f"Fed {fed.get('rate', '?')}% (next: {fed.get('next', '?')})")
+        if nimbus_geo:
+            macro_parts.append(f"Iran: {nimbus_geo.get('iran_war', '?')}")
+        if macro_parts:
+            sections.append("  Macro: " + " | ".join(macro_parts))
+    except Exception as e:
+        log.error("Wukong regime section failed: %s", e)
 
     # ━━━ WATCHLIST ━━━
     prices = fetch_prices()
@@ -400,6 +434,16 @@ def generate_report(send_to_telegram: bool = False, report_type: str = "morning"
     except Exception as e:
         log.error("Smart money section failed: %s", e)
 
+    # ━━━ DEEP DIVE ALERTS ━━━
+    try:
+        from research.research_manager import get_price_alerts
+        if prices:
+            dd_alerts = get_price_alerts(prices)
+            if dd_alerts:
+                sections.append("\n\u2501\u2501\u2501 <b>DEEP DIVE ALERTS</b> \u2501\u2501\u2501\n" + "\n".join(dd_alerts))
+    except Exception as e:
+        log.error("Deep dive alerts failed: %s", e)
+
     # ━━━ REGIME ━━━
     bear_pct = cycle["bear_progress_pct"] if btc_price else 0
     if bear_pct < 60:
@@ -410,7 +454,14 @@ def generate_report(send_to_telegram: bool = False, report_type: str = "morning"
         dry = "30-40%"
 
     cycle_says = "accumulate slowly, save for $50-60K BTC zone" if bear_pct < 60 else "nearing bottom, increase exposure"
-    macro_says = "early expansion building" if liq and liq.get("fred_regime") == "EXPANDING" else "uncertain direction"
+    # Use Wukong regime if available (matches TradingView exactly)
+    try:
+        from nimbus_sync import get_regimes
+        wk = get_regimes()
+        us_r = wk.get("us_regime", "UNKNOWN") if wk else "UNKNOWN"
+        macro_says = f"US liq {us_r.lower()}" if us_r != "UNKNOWN" else "uncertain direction"
+    except Exception:
+        macro_says = "early expansion building" if liq and liq.get("fred_regime") == "EXPANDING" else "uncertain direction"
 
     sections.append(
         f"\n━━━ <b>REGIME</b> ━━━\n"
@@ -529,6 +580,7 @@ def send_telegram(text: str):
             resp = requests.post(url, json={
                 "chat_id": TELEGRAM_CHAT_ID, "text": chunk,
                 "parse_mode": "HTML", "disable_web_page_preview": True,
+                    "reply_markup": _KEYBOARD_JSON,
             }, timeout=15)
             if resp.status_code == 200:
                 log.info("Telegram chunk sent (%d chars)", len(chunk))

@@ -1,0 +1,14 @@
+{
+  "BTC": {"score": 90, "rating": "EXCEPTIONAL", "recommendation": "ACCUMULATE", "price": 70800, "ev_multiple": 2.85, "bear": "$35-55K", "base": "$200-250K", "bull": "$350K", "updated": "2026-03-15"},
+  "SOL": {"score": 82, "rating": "STRONG", "recommendation": "ACCUMULATE", "price": 88.50, "ev_multiple": 4.9, "bear": "$40-55", "base": "$400-500", "bull": "$800", "updated": "2026-03-15"},
+  "HYPE": {"score": 79, "rating": "STRONG", "recommendation": "ACCUMULATE", "price": 37.90, "ev_multiple": 3.1, "bear": "$12-18", "base": "$100-150", "bull": "$300", "updated": "2026-03-15"},
+  "JUP": {"score": 78, "rating": "STRONG", "recommendation": "ACCUMULATE", "price": 0.16, "ev_multiple": 12.7, "bear": "$0.05-0.10", "base": "$1.50-3.00", "bull": "$6", "updated": "2026-03-15"},
+  "RENDER": {"score": 72, "rating": "WATCHLIST", "recommendation": "WATCH", "price": 1.87, "ev_multiple": 6.5, "bear": "$0.50-1.00", "base": "$10-14", "bull": "$35", "flags": ["correlation trap"], "updated": "2026-03-15"},
+  "SUI": {"score": 71, "rating": "WATCHLIST", "recommendation": "WATCH", "price": 1.01, "ev_multiple": 6.6, "bear": "$0.40-0.60", "base": "$5-8", "bull": "$18", "flags": ["61% locked supply"], "updated": "2026-03-15"},
+  "PUMP": {"score": 55, "rating": "SPECULATIVE", "recommendation": "SMALL_POSITION", "price": 0.002, "ev_multiple": 6.5, "bear": "zero risk", "base": "$0.005-0.01", "bull": "$0.02", "flags": ["team selling"], "updated": "2026-03-15"},
+  "BONK": {"score": 52, "rating": "SPECULATIVE", "recommendation": "SMALL_POSITION", "price": 0.0000061, "ev_multiple": 4.6, "bear": "$0.000002", "base": "$0.00002-4", "bull": "$0.00006", "updated": "2026-03-15"},
+  "USELESS": {"score": 45, "rating": "PROVISIONAL", "recommendation": "HOLD_ONLY", "price": null, "ev_multiple": null, "flags": ["insufficient data"], "updated": "2026-03-15"},
+  "PENGU": {"score": 44, "rating": "SPECULATIVE", "recommendation": "MOONBAG_ONLY", "price": 0.004, "ev_multiple": 3.5, "bear": "$0.001", "base": "$0.01-0.02", "bull": "$0.05", "updated": "2026-03-15"},
+  "FARTCOIN": {"score": 25, "rating": "AVOID", "recommendation": "JINGUBANG_ONLY", "price": 0.25, "ev_multiple": null, "flags": ["NCRA only"], "updated": "2026-03-15"},
+  "DEEP": {"score": null, "rating": "TBD", "recommendation": "RESEARCH_NEEDED", "price": null, "ev_multiple": null, "updated": "2026-03-15"}
+}

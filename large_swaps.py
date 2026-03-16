@@ -12,6 +12,14 @@ from db.connection import execute, execute_one
 
 log = get_logger("large_swaps")
 
+# Persistent keyboard for Telegram messages
+_KEYBOARD_JSON = {
+    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+
+
 # ---------------------------------------------------------------------------
 # Token addresses (Solana) + CoinGecko IDs for non-Solana
 # ---------------------------------------------------------------------------
@@ -282,6 +290,7 @@ def send_telegram(text: str):
             "text": text,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
+            "reply_markup": _KEYBOARD_JSON,
         }, timeout=15)
         if resp.status_code != 200:
             log.error("Telegram send failed: %s", resp.text)

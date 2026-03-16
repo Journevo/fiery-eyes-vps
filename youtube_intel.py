@@ -17,6 +17,14 @@ from db.connection import execute
 
 log = get_logger("youtube_intel")
 
+# Persistent keyboard for Telegram messages
+_KEYBOARD_JSON = {
+    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+
+
 # v5.1 watchlist tokens
 WATCHLIST = {"BTC", "SOL", "JUP", "HYPE", "RENDER", "BONK", "PUMP", "PENGU", "FARTCOIN", "MSTR", "COIN"}
 
@@ -232,7 +240,7 @@ def format_youtube_for_report(intel: dict) -> str | None:
     for wm in watchlist[:4]:
         sentiment = "🟢" if wm["bullish"] > wm["bearish"] else ("🔴" if wm["bearish"] > wm["bullish"] else "⚪")
         channels = ", ".join(wm["channels"][:2])
-        lines.append(f"  {sentiment} ${wm['symbol']}: {wm['total_mentions']} mentions, conv {wm['weighted_conviction']:.0f}/10 ({channels})")
+        lines.append(f"  {sentiment} ${wm['symbol']}: {wm['total_mentions']} mentions, conv {(wm.get("weighted_conviction") or 0):.0f}/10 ({channels})")
 
     convergence = intel.get("convergence", [])
     for c in convergence:
@@ -251,6 +259,7 @@ def send_telegram(text: str):
             "text": text,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
+            "reply_markup": _KEYBOARD_JSON,
         }, timeout=15)
         if resp.status_code != 200:
             log.error("Telegram failed: %s", resp.text)

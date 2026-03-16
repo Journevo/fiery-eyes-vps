@@ -11,6 +11,14 @@ from db.connection import execute, execute_one
 
 log = get_logger("portfolio")
 
+# Persistent keyboard for Telegram messages
+_KEYBOARD_JSON = {
+    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+
+
 # Target allocations (of deployed capital)
 TARGET_ALLOC = {
     "JUP": 25, "HYPE": 20, "RENDER": 17, "BONK": 15,
@@ -265,6 +273,7 @@ def send_telegram(text: str):
             "text": text,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
+            "reply_markup": _KEYBOARD_JSON,
         }, timeout=15)
         if resp.status_code != 200:
             log.error("Telegram failed: %s", resp.text)

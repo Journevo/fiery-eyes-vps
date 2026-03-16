@@ -15,6 +15,14 @@ from db.connection import execute
 
 log = get_logger("outputs")
 
+# Persistent keyboard for Telegram messages
+_KEYBOARD_JSON = {
+    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+
+
 
 def _fmt_usd(v):
     if v is None: return "—"
@@ -209,6 +217,7 @@ def send_telegram(text: str, chat_id: str | None = None):
                 "text": chunk,
                 "parse_mode": "HTML",
                 "disable_web_page_preview": True,
+                    "reply_markup": _KEYBOARD_JSON,
             }, timeout=15)
             if resp.status_code != 200:
                 log.error("Telegram failed: %s", resp.text)

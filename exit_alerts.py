@@ -14,6 +14,14 @@ from db.connection import execute
 
 log = get_logger("exit_alerts")
 
+# Persistent keyboard for Telegram messages
+_KEYBOARD_JSON = {
+    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+
+
 # ---------------------------------------------------------------------------
 # Exit rules per tier
 # ---------------------------------------------------------------------------
@@ -275,6 +283,7 @@ def send_telegram(text: str):
             requests.post(url, json={
                 "chat_id": TELEGRAM_CHAT_ID, "text": chunk,
                 "parse_mode": "HTML", "disable_web_page_preview": True,
+                    "reply_markup": _KEYBOARD_JSON,
             }, timeout=15)
     except Exception as e:
         log.error("Telegram error: %s", e)

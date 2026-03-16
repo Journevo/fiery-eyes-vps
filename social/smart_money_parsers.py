@@ -90,14 +90,26 @@ def _extract_solana_address(text: str) -> str | None:
     return match.group(0) if match else None
 
 
+# Words near a dollar amount that mean it's NOT a trade amount
+_MCAP_CONTEXT_WORDS = re.compile(
+    r'(?:market\s*cap|mcap|m\.cap|capitali[sz]ation|fdv|fully\s*diluted|'
+    r'total\s*supply|circ\s*supply|tvl|aum|volume|vol)',
+    re.IGNORECASE,
+)
+
+
 def _extract_usd_amount(text: str) -> float | None:
-    """Extract the largest USD dollar amount from text."""
-    amounts = []
+    """Extract USD dollar amount from text, excluding market cap values.
+
+    Returns the FIRST trade-related amount, not the largest.
+    Filters out amounts near 'market cap', 'mcap', 'fdv', 'volume' etc.
+    """
+    candidates = []  # (position, value)
 
     # Plain format: $1,234
     for m in USD_PLAIN_RE.finditer(text):
         val = float(m.group(1).replace(',', ''))
-        amounts.append(val)
+        candidates.append((m.start(), val))
 
     # Suffix format: $1.2K, $50M
     for m in USD_SUFFIX_RE.finditer(text):
@@ -109,9 +121,27 @@ def _extract_usd_amount(text: str) -> float | None:
             val *= 1_000_000
         elif suffix == 'B':
             val *= 1_000_000_000
-        amounts.append(val)
+        candidates.append((m.start(), val))
 
-    return max(amounts) if amounts else None
+    if not candidates:
+        return None
+
+    # Sort by position (order of appearance in text)
+    candidates.sort(key=lambda x: x[0])
+
+    # Filter out amounts near market-cap context words
+    filtered = []
+    for pos, val in candidates:
+        # Check 40 chars before and 20 chars after the amount for MCap context
+        context_before = text[max(0, pos - 40):pos].lower()
+        context_after = text[pos:min(len(text), pos + 30)].lower()
+        context = context_before + " " + context_after
+        if _MCAP_CONTEXT_WORDS.search(context):
+            continue
+        filtered.append(val)
+
+    # Return first trade-related amount (most likely the buy/sell size)
+    return filtered[0] if filtered else None
 
 
 def _extract_symbols(text: str) -> list[str]:

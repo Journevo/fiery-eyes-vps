@@ -25,6 +25,30 @@ from social.smart_money_parsers import PARSER_MAP
 
 log = get_logger("social.grok_poller")
 
+# Cost tracking
+_daily_cost = 0.0
+_daily_calls = 0
+_cost_reset_day = None
+
+def _track_cost(estimated_usd: float):
+    """Track estimated Grok API cost."""
+    global _daily_cost, _daily_calls, _cost_reset_day
+    from datetime import date
+    today = date.today()
+    if _cost_reset_day != today:
+        if _daily_calls > 0:
+            log.info("GROK COST YESTERDAY: $%.2f (%d calls)", _daily_cost, _daily_calls)
+        _daily_cost = 0.0
+        _daily_calls = 0
+        _cost_reset_day = today
+    _daily_cost += estimated_usd
+    _daily_calls += 1
+    if _daily_calls % 10 == 0:
+        log.info("GROK COST TODAY: $%.2f (%d calls so far)", _daily_cost, _daily_calls)
+
+def get_daily_cost():
+    return {"cost_usd": round(_daily_cost, 2), "calls": _daily_calls}
+
 GROK_RESPONSES_URL = "https://api.x.ai/v1/responses"
 GROK_MODEL = "grok-4-1-fast"
 
@@ -73,6 +97,13 @@ def _grok_fetch_tweets(handle: str, interval_min: int = 30,
     """
     if not GROK_API_KEY:
         log.debug("GROK_API_KEY not set — skipping poll for @%s", handle)
+        return []
+
+    # Check exponential backoff
+    from monitoring.degraded import get_grok_backoff
+    backoff = get_grok_backoff()
+    if backoff > 0:
+        log.debug("Grok backoff active (%ds remaining) — skipping @%s", backoff, handle)
         return []
 
     user_prompt = (
@@ -141,7 +172,9 @@ def _grok_fetch_tweets(handle: str, interval_min: int = 30,
                          handle, type(tweets).__name__)
             return []
 
-        log.info("Grok returned %d tweets for @%s", len(tweets), handle)
+        actual_cost = data.get("usage", {}).get("cost_in_usd_ticks", 0) / 1e9
+        log.info("Grok returned %d tweets for @%s (cost $%.4f)", len(tweets), handle, actual_cost)
+        _track_cost(actual_cost)
         return [str(t) for t in tweets if t]
 
     except json.JSONDecodeError as e:
@@ -206,13 +239,20 @@ def _load_monitor_config() -> dict:
 
 
 def _grok_fetch_tweets_batch(handles: list[str], interval_min: int = 30,
-                              max_tweets: int = 5) -> list[dict]:
+                              max_tweets: int = 3) -> list[dict]:
     """Call Grok Responses API with multiple handles in allowed_x_handles.
 
     Returns list of {"handle": str, "text": str} dicts, empty on error.
     Uses a longer timeout (90s) since batch queries take more time.
     """
     if not GROK_API_KEY or not handles:
+        return []
+
+    # Check exponential backoff
+    from monitoring.degraded import get_grok_backoff
+    backoff = get_grok_backoff()
+    if backoff > 0:
+        log.debug("Grok backoff active (%ds remaining) — skipping batch", backoff)
         return []
 
     handles_str = ", ".join(f"@{h}" for h in handles)
@@ -293,7 +333,9 @@ def _grok_fetch_tweets_batch(handles: list[str], interval_min: int = 30,
                 # Fallback: if Grok returns plain strings, attribute to first handle
                 results.append({"handle": handles[0], "text": t})
 
-        log.info("Grok batch returned %d tweets for %d handles", len(results), len(handles))
+        actual_cost = data.get("usage", {}).get("cost_in_usd_ticks", 0) / 1e9
+        log.info("Grok batch returned %d tweets for %d handles (cost $%.4f)", len(results), len(handles), actual_cost)
+        _track_cost(actual_cost)
         return results
 
     except json.JSONDecodeError as e:
@@ -512,34 +554,14 @@ def poll_account(handle_config: dict) -> int:
 
 
 def _poll_specialized_accounts() -> dict:
-    """Poll the 4 original specialized accounts individually.
+    """Poll specialized accounts as ONE batch call (not 7 individual calls).
 
     Returns:
         {"total_signals": int, "per_account": {handle: count}, "errors": [str]}
     """
-    total = 0
-    per_account = {}
-    errors = []
-
-    for config in SMART_MONEY_ACCOUNTS:
-        handle = config["handle"]
-        try:
-            count = poll_account(config)
-            per_account[handle] = count
-            total += count
-        except GrokRateLimited:
-            log.warning("Grok rate-limited — aborting specialized poll cycle")
-            return {"total_signals": total, "per_account": per_account,
-                    "errors": errors, "rate_limited": True}
-        except Exception as e:
-            log.error("Poll failed for @%s: %s", handle, e)
-            errors.append(handle)
-            per_account[handle] = 0
-
-        # 2s sleep between accounts to avoid rate-limiting
-        time.sleep(2)
-
-    return {"total_signals": total, "per_account": per_account, "errors": errors}
+    handles = [cfg["handle"] for cfg in SMART_MONEY_ACCOUNTS]
+    log.info("Polling %d specialized accounts as single batch", len(handles))
+    return _poll_batch_tier(handles, batch_size=30)
 
 
 def _poll_batch_tier(accounts: list[str], batch_size: int) -> dict:
@@ -606,9 +628,10 @@ def _poll_batch_tier(accounts: list[str], batch_size: int) -> dict:
 
 
 def run_smart_money_poll_high() -> dict:
-    """Poll HIGH tier: 4 specialized accounts + HIGH generic (batches of 10).
+    """Poll 10 KEY accounts only (cost-optimised).
 
-    Called every 30 minutes.
+    One batch call for all key accounts = ~$0.55/call.
+    Called every 4 hours, aligned with X Intel batches.
 
     Returns:
         {"total_signals": int, "per_account": {handle: count}, "errors": [str]}
@@ -617,57 +640,27 @@ def run_smart_money_poll_high() -> dict:
         log.warning("GROK_API_KEY not set — smart money polling disabled")
         return {"total_signals": 0, "per_account": {}, "errors": []}
 
-    log.info("=== Smart money HIGH tier poll starting ===")
+    # Check backoff
+    from monitoring.degraded import get_grok_backoff
+    if get_grok_backoff() > 0:
+        log.info("Grok in backoff — skipping poll")
+        return {"total_signals": 0, "per_account": {}, "errors": []}
 
-    # 1. Poll specialized accounts individually
-    result = _poll_specialized_accounts()
+    log.info("=== Smart money poll (10 key accounts) ===")
 
-    # 2. Poll HIGH generic accounts in batches (skip if already rate-limited)
-    if result.get("rate_limited"):
-        log.warning("Skipping HIGH generic poll — Grok rate-limited")
-    else:
-        config = _load_monitor_config()
-        high_accounts = config.get("high", [])
+    # Single batch call for all key accounts
+    key_handles = [cfg["handle"] for cfg in SMART_MONEY_ACCOUNTS]
+    result = _poll_batch_tier(key_handles, batch_size=10)
 
-        if high_accounts:
-            batch_result = _poll_batch_tier(high_accounts, batch_size=10)
-            result["total_signals"] += batch_result["total_signals"]
-            result["per_account"].update(batch_result["per_account"])
-            result["errors"].extend(batch_result["errors"])
-
-    log.info("Smart money HIGH tier poll complete: %d new signals",
+    log.info("Smart money poll complete: %d new signals (cost ~$0.55)",
              result["total_signals"])
 
     return result
 
 
 def run_smart_money_poll_medium() -> dict:
-    """Poll MEDIUM tier: MEDIUM generic accounts only (batches of 15).
-
-    Called every 2 hours.
-
-    Returns:
-        {"total_signals": int, "per_account": {handle: count}, "errors": [str]}
-    """
-    if not GROK_API_KEY:
-        log.warning("GROK_API_KEY not set — smart money polling disabled")
-        return {"total_signals": 0, "per_account": {}, "errors": []}
-
-    log.info("=== Smart money MEDIUM tier poll starting ===")
-
-    config = _load_monitor_config()
-    medium_accounts = config.get("medium", [])
-
-    if not medium_accounts:
-        log.info("No MEDIUM tier accounts to poll")
-        return {"total_signals": 0, "per_account": {}, "errors": []}
-
-    result = _poll_batch_tier(medium_accounts, batch_size=15)
-
-    log.info("Smart money MEDIUM tier poll complete: %d new signals (%d accounts)",
-             result["total_signals"], len(medium_accounts))
-
-    return result
+    """DISABLED — cost too high. All accounts covered by key 10."""
+    return {"total_signals": 0, "per_account": {}, "errors": []}
 
 
 def run_smart_money_poll() -> dict:

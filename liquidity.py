@@ -12,6 +12,14 @@ from db.connection import execute, execute_one
 
 log = get_logger("liquidity")
 
+# Persistent keyboard for Telegram messages
+_KEYBOARD_JSON = {
+    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+
+
 # M2 inflection date (when M2 started rising)
 M2_INFLECTION_DATE = datetime(2025, 10, 1, tzinfo=timezone.utc)
 M2_LAG_HISTORICAL = (56, 70)  # Historical lag range in days
@@ -142,7 +150,12 @@ def fetch_dxy() -> float | None:
 # Regime calculation
 # ---------------------------------------------------------------------------
 def compute_fred_regime() -> tuple[str, float]:
-    """Calculate FRED regime from 30-day net liquidity slope."""
+    """Calculate FRED regime from 30-day net liquidity slope.
+    Thresholds MUST match Jingubang app.py and nimbus_sync.py:
+      slope > 0.05  → EXPANDING
+      slope < -0.05 → CONTRACTING
+      else          → STALL
+    These match TradingView Wukong indicators exactly."""
     fed_now = fetch_fred_series("WALCL")
     tga_now = fetch_fred_series("WTREGEN")
     rrp_now = fetch_fred_series("RRPONTSYD")
@@ -324,6 +337,7 @@ def send_telegram(text: str):
             "text": text,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
+            "reply_markup": _KEYBOARD_JSON,
         }, timeout=15)
         if resp.status_code != 200:
             log.error("Telegram failed: %s", resp.text)

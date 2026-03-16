@@ -1,8 +1,7 @@
-"""Nimbus Staleness Check — Fix 9
+"""Nimbus Staleness Check — v2
 
-Checks nimbus_data.py as_of_date on Jingubang VPS.
-Warns in every report if >30 days stale.
-BTC circuit breaker: if BTC moves >20% from price at last Nimbus update.
+Uses nimbus_sync DB instead of hardcoded values.
+Checks as_of_date freshness and BTC circuit breaker.
 """
 
 from datetime import datetime, date
@@ -10,29 +9,41 @@ from config import get_logger
 
 log = get_logger("nimbus_check")
 
-# Hardcoded from Jingubang — updated when nimbus_data.py is edited
-NIMBUS_AS_OF_DATE = "2026-02-18"
-NIMBUS_BTC_PRICE_AT_UPDATE = 83000  # Approximate BTC price on Feb 18
-
 STALENESS_WARN_DAYS = 30
 BTC_CIRCUIT_BREAKER_PCT = 20
 
 
 def check_nimbus_staleness(current_btc_price: float | None = None) -> dict:
     """Check Nimbus data staleness and BTC circuit breaker."""
-    as_of = datetime.strptime(NIMBUS_AS_OF_DATE, "%Y-%m-%d").date()
-    days_stale = (date.today() - as_of).days
-    is_stale = days_stale > STALENESS_WARN_DAYS
+    try:
+        from nimbus_sync import get_staleness, get_nimbus_section
+        staleness = get_staleness()
+        as_of_str = staleness["as_of_date"]
+        days_stale = staleness["days_stale"]
+        is_stale = staleness["is_stale"]
+    except Exception:
+        # Fallback to old hardcoded method if nimbus_sync not available
+        as_of_str = "unknown"
+        days_stale = 999
+        is_stale = True
 
     # BTC circuit breaker
     btc_breaker = False
     btc_move_pct = None
-    if current_btc_price and NIMBUS_BTC_PRICE_AT_UPDATE:
-        btc_move_pct = abs(current_btc_price - NIMBUS_BTC_PRICE_AT_UPDATE) / NIMBUS_BTC_PRICE_AT_UPDATE * 100
-        btc_breaker = btc_move_pct >= BTC_CIRCUIT_BREAKER_PCT
+    if current_btc_price:
+        try:
+            from nimbus_sync import get_nimbus_section
+            crypto = get_nimbus_section("crypto")
+            if crypto and crypto.get("btc_price"):
+                nimbus_btc = crypto["btc_price"][-1]
+                if nimbus_btc:
+                    btc_move_pct = abs(current_btc_price - nimbus_btc) / nimbus_btc * 100
+                    btc_breaker = btc_move_pct >= BTC_CIRCUIT_BREAKER_PCT
+        except Exception:
+            pass
 
     result = {
-        "as_of_date": NIMBUS_AS_OF_DATE,
+        "as_of_date": as_of_str,
         "days_stale": days_stale,
         "is_stale": is_stale,
         "btc_circuit_breaker": btc_breaker,
@@ -40,9 +51,9 @@ def check_nimbus_staleness(current_btc_price: float | None = None) -> dict:
     }
 
     if is_stale:
-        log.warning("Nimbus data %d days stale (as_of: %s)", days_stale, NIMBUS_AS_OF_DATE)
+        log.warning("Nimbus data %d days stale (as_of: %s)", days_stale, as_of_str)
     if btc_breaker:
-        log.warning("BTC circuit breaker: moved %.1f%% from Nimbus update price", btc_move_pct)
+        log.warning("BTC circuit breaker: moved %.1f%% since Nimbus update", btc_move_pct)
 
     return result
 

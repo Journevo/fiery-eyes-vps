@@ -16,6 +16,14 @@ from db.connection import execute
 
 log = get_logger("synthesis")
 
+# Persistent keyboard for Telegram messages
+_KEYBOARD_JSON = {
+    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+
+
 SONNET_MODEL = "claude-sonnet-4-20250514"
 
 
@@ -41,6 +49,14 @@ def collect_all_layers() -> dict:
         layers["liquidity"] = run_liquidity_tracker()
     except Exception as e:
         log.error("Layer 4 (liquidity) failed: %s", e)
+
+    # Layer 4b: Nimbus Macro (from Jingubang VPS)
+    try:
+        from nimbus_sync import format_macro_for_synthesis, get_regimes
+        layers["nimbus_macro"] = format_macro_for_synthesis()
+        layers["wukong_regimes"] = get_regimes()
+    except Exception as e:
+        log.error("Layer 4b (Nimbus macro) failed: %s", e)
 
     # Layer 5: Sentiment / Market Structure
     try:
@@ -166,6 +182,19 @@ def build_synthesis_prompt(layers: dict) -> str:
             f"M2 ${liq.get('global_m2', 0)}T, DXY {liq.get('dxy', 0)}, "
             f"M2 lag {liq.get('m2_lag_days', 0)}d ({liq.get('m2_lag_status', '')}), "
             f"Alignment: {liq.get('alignment', '')}."
+        )
+
+    # Nimbus G5 Macro (from Jingubang)
+    nimbus_macro = layers.get("nimbus_macro")
+    if nimbus_macro:
+        sections.append(nimbus_macro)
+    wukong = layers.get("wukong_regimes", {})
+    if wukong:
+        sections.append(
+            f"WUKONG REGIME (matches TradingView): "
+            f"US Net Liq {wukong.get('us_regime', '?')} | "
+            f"Global {wukong.get('global_regime', '?')} | "
+            f"M2 {wukong.get('m2_regime', '?')}"
         )
 
     # Market Structure
@@ -386,6 +415,7 @@ def send_telegram(text: str):
             resp = requests.post(url, json={
                 "chat_id": TELEGRAM_CHAT_ID, "text": chunk,
                 "parse_mode": "HTML", "disable_web_page_preview": True,
+                    "reply_markup": _KEYBOARD_JSON,
             }, timeout=15)
             if resp.status_code != 200:
                 log.error("Telegram failed: %s", resp.text)

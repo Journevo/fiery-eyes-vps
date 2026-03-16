@@ -29,6 +29,14 @@ from db.connection import execute
 
 log = get_logger("deepdive")
 
+# Persistent keyboard for Telegram messages
+_KEYBOARD_JSON = {
+    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+
+
 SONNET_MODEL = "claude-sonnet-4-20250514"
 
 
@@ -311,6 +319,7 @@ def send_telegram(text: str):
                 "text": chunk,
                 "parse_mode": "HTML",
                 "disable_web_page_preview": True,
+                    "reply_markup": _KEYBOARD_JSON,
             }, timeout=15)
     except Exception as e:
         log.error("Telegram error: %s", e)

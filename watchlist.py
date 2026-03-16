@@ -13,6 +13,14 @@ from db.connection import execute, execute_one
 
 log = get_logger("watchlist")
 
+# Persistent keyboard for Telegram messages
+_KEYBOARD_JSON = {
+    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+
+
 # ---------------------------------------------------------------------------
 # Token configuration
 # ---------------------------------------------------------------------------
@@ -88,6 +96,7 @@ def fetch_prices() -> dict:
     ids_str = ",".join(cg_ids)
 
     try:
+        import time as _time
         url = "https://api.coingecko.com/api/v3/simple/price"
         params = {
             "ids": ids_str,
@@ -100,9 +109,21 @@ def fetch_prices() -> dict:
         if COINGECKO_API_KEY:
             headers["x-cg-demo-key"] = COINGECKO_API_KEY
 
-        resp = requests.get(url, params=params, headers=headers, timeout=20)
-        resp.raise_for_status()
-        data = resp.json()
+        # Retry up to 3 times with exponential backoff for rate limits
+        data = None
+        for attempt in range(3):
+            resp = requests.get(url, params=params, headers=headers, timeout=20)
+            if resp.status_code == 429:
+                wait = 10 * (attempt + 1)
+                log.warning("CoinGecko rate-limited (429), waiting %ds...", wait)
+                _time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            break
+        if data is None:
+            log.error("CoinGecko failed after 3 retries")
+            return {}
 
         results = {}
         for symbol, cfg in TOKENS.items():
@@ -320,6 +341,7 @@ def send_telegram(text: str, chat_id: str | None = None):
             "text": text,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
+            "reply_markup": _KEYBOARD_JSON,
         }, timeout=15)
         if resp.status_code == 200:
             log.info("Telegram message sent")

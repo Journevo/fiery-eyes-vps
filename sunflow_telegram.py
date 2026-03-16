@@ -19,6 +19,14 @@ from db.connection import execute, execute_one
 
 log = get_logger("sunflow_telegram")
 
+# Persistent keyboard for Telegram messages
+_KEYBOARD_JSON = {
+    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+
+
 # SunFlow Alpha channel — find by username or ID
 SUNFLOW_CHANNEL = "SunFlowAlpha"  # Will resolve on first connect
 
@@ -267,6 +275,7 @@ def send_telegram(text: str):
         requests.post(url, json={
             "chat_id": TELEGRAM_CHAT_ID, "text": text,
             "parse_mode": "HTML", "disable_web_page_preview": True,
+            "reply_markup": _KEYBOARD_JSON,
         }, timeout=15)
     except Exception as e:
         log.error("Telegram error: %s", e)

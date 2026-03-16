@@ -1,4 +1,4 @@
-"""Fiery Eyes v5.1 — Telegram Bot + Scheduler
+"""Fiery Eyes v5.2 — Telegram Bot + Scheduler
 
 Handles v5 commands and runs scheduled tasks:
 - /report   — generate daily intelligence report on demand
@@ -11,14 +11,23 @@ Handles v5 commands and runs scheduled tasks:
 - /bought TOKEN AMOUNT PRICE — log purchase
 - /sold TOKEN AMOUNT PRICE — log sale
 
-Scheduled:
-- Every 4h: watchlist prices, swap detection
-- Daily 00:00 UTC: full report + recommendation logging
+Schedule (all UTC):
+  05:45    Nimbus sync from Jingubang
+  06:00    Morning Brief (full report + synthesis)
+  06,10,14,18,22:00  X Intel batch
+  20:00    Evening Review
+  Sunday 08:00  Weekly review
+  Every 2h:  Grok MEDIUM poll (data collection)
+  Every 4h:  Watchlist + swap detection + market structure
+
+YouTube: on-demand only (Sonnet analysis via /analyse)
+H-Fire alerts: immediate (convergence, large swaps)
 """
 
 import threading
 import time
 import schedule
+import requests as req
 from datetime import datetime, timezone
 from telegram import Update, Bot, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -33,12 +42,71 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
     is_persistent=True,
 )
 
+# Keyboard as JSON for raw API calls (scheduled sends)
+MAIN_KEYBOARD_JSON = {
+    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
 
 
+def send_telegram_with_keyboard(text: str, parse_mode: str = "HTML"):
+    """Send message via raw API with persistent keyboard attached."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    max_len = 4000
+    if len(text) <= max_len:
+        chunks = [text]
+    else:
+        chunks = []
+        current = ""
+        for para in text.split("\n\n"):
+            if current and len(current) + len(para) + 2 > max_len:
+                chunks.append(current)
+                current = ""
+            current = current + "\n\n" + para if current else para
+        if current:
+            chunks.append(current)
 
-# ---------------------------------------------------------------------------
-# Command handlers
-# ---------------------------------------------------------------------------
+    for chunk in chunks:
+        try:
+            resp = req.post(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                json={
+                    "chat_id": TELEGRAM_CHAT_ID,
+                    "text": chunk,
+                    "parse_mode": parse_mode,
+                    "disable_web_page_preview": True,
+                    "reply_markup": MAIN_KEYBOARD_JSON,
+                },
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                log.info("Telegram sent (%d chars, msg %s)",
+                         len(chunk), resp.json().get("result", {}).get("message_id", "?"))
+            elif resp.status_code == 400 and parse_mode == "HTML":
+                # HTML parse error — retry without formatting
+                log.warning("Telegram HTML parse failed, retrying as plain text")
+                resp2 = req.post(
+                    f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                    json={
+                        "chat_id": TELEGRAM_CHAT_ID,
+                        "text": chunk,
+                        "disable_web_page_preview": True,
+                        "reply_markup": MAIN_KEYBOARD_JSON,
+                    },
+                    timeout=15,
+                )
+                if resp2.status_code == 200:
+                    log.info("Telegram sent as plain text (%d chars)", len(chunk))
+                else:
+                    log.error("Telegram send failed even as plain: %s", resp2.text[:200])
+            else:
+                log.error("Telegram send failed (%d): %s", resp.status_code, resp.text[:200])
+        except Exception as e:
+            log.error("Telegram error: %s", e)
+
+
 # ---------------------------------------------------------------------------
 # Persistent menu handlers
 # ---------------------------------------------------------------------------
@@ -89,7 +157,7 @@ async def handle_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "🔧 Tools":
         keyboard = InlineKeyboardMarkup([[
             InlineKeyboardButton("Analyse URL", callback_data="tool_analyse"),
-            InlineKeyboardButton("Deepdive", callback_data="tool_deepdive"),
+            InlineKeyboardButton("Deepdive", callback_data="cmd_deepdive"),
             InlineKeyboardButton("Ledger", callback_data="cmd_ledger"),
             InlineKeyboardButton("Help", callback_data="tool_help"),
         ]])
@@ -116,6 +184,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "cmd_market": cmd_market,
         "cmd_chains": cmd_chains,
         "cmd_scores": cmd_scores,
+        "cmd_deepdive": cmd_deepdive_research,
         "cmd_synthesis": cmd_synthesis,
         "cmd_sunflow": cmd_sunflow,
         "cmd_signals": cmd_signals,
@@ -132,10 +201,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     if data in cmd_map:
-        # Create a fake Update with the callback's message for reply
-        class FakeUpdate:
-            def __init__(self, message):
-                self.message = message
         class FakeMessage:
             def __init__(self, chat_id, bot):
                 self.chat_id = chat_id
@@ -143,6 +208,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             async def reply_text(self, text, **kwargs):
                 kwargs["reply_markup"] = MAIN_KEYBOARD
                 await self._bot.send_message(self.chat_id, text, **kwargs)
+
+        class FakeUpdate:
+            def __init__(self, message):
+                self.message = message
 
         fake_msg = FakeMessage(query.message.chat_id, context.bot)
         fake_update = FakeUpdate(fake_msg)
@@ -173,35 +242,38 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=MAIN_KEYBOARD)
 
     elif data == "tool_help":
-        # Trigger the help command
-        class FakeUpdate2:
-            def __init__(self, msg):
-                self.message = msg
-        class FakeMsg2:
+        class FakeMessage2:
             def __init__(self, cid, bot):
                 self.chat_id = cid
                 self._bot = bot
             async def reply_text(self, text, **kwargs):
                 kwargs["reply_markup"] = MAIN_KEYBOARD
                 await self._bot.send_message(self.chat_id, text, **kwargs)
-        await cmd_help(FakeUpdate2(FakeMsg2(query.message.chat_id, context.bot)), context)
+
+        class FakeUpdate2:
+            def __init__(self, msg):
+                self.message = msg
+
+        await cmd_help(FakeUpdate2(FakeMessage2(query.message.chat_id, context.bot)), context)
 
 
 async def cmd_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show the persistent keyboard menu."""
     await update.message.reply_text(
-        "🔥 <b>FIERY EYES v5.1</b>\nTap a button below:",
+        "🔥 <b>FIERY EYES v5.2</b>\nTap a button below:",
         parse_mode="HTML",
         reply_markup=MAIN_KEYBOARD)
 
 
+# ---------------------------------------------------------------------------
+# Command handlers — ALL include reply_markup=MAIN_KEYBOARD
+# ---------------------------------------------------------------------------
 async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Generate and send daily intelligence report."""
     await update.message.reply_text("⏳ Generating report...", reply_markup=MAIN_KEYBOARD)
     try:
         from daily_report import generate_report
         report = generate_report(send_to_telegram=False)
-        # Split if needed
         if len(report) > 4000:
             parts = report.split("\n━━━")
             current = parts[0]
@@ -209,16 +281,19 @@ async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 candidate = current + "\n━━━" + part
                 if len(candidate) > 4000:
                     await update.message.reply_text(current, parse_mode="HTML",
-                                                     disable_web_page_preview=True)
+                                                     disable_web_page_preview=True,
+                                                     reply_markup=MAIN_KEYBOARD)
                     current = "━━━" + part
                 else:
                     current = candidate
             if current:
                 await update.message.reply_text(current, parse_mode="HTML",
-                                                 disable_web_page_preview=True)
+                                                 disable_web_page_preview=True,
+                                                 reply_markup=MAIN_KEYBOARD)
         else:
             await update.message.reply_text(report, parse_mode="HTML",
-                                             disable_web_page_preview=True)
+                                             disable_web_page_preview=True,
+                                             reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/report error: %s", e)
         await update.message.reply_text(f"⚠️ Report failed: {e}", reply_markup=MAIN_KEYBOARD)
@@ -231,7 +306,8 @@ async def cmd_cycle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cycle = run_cycle_tracker()
         if cycle:
             await update.message.reply_text(format_cycle_telegram(cycle),
-                                             parse_mode="HTML")
+                                             parse_mode="HTML",
+                                             reply_markup=MAIN_KEYBOARD)
         else:
             await update.message.reply_text("⚠️ BTC price unavailable", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
@@ -246,7 +322,8 @@ async def cmd_watchlist(update: Update, context: ContextTypes.DEFAULT_TYPE):
         prices = run_watchlist()
         if prices:
             await update.message.reply_text(format_watchlist_telegram(prices),
-                                             parse_mode="HTML")
+                                             parse_mode="HTML",
+                                             reply_markup=MAIN_KEYBOARD)
         else:
             await update.message.reply_text("⚠️ No prices available", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
@@ -261,7 +338,8 @@ async def cmd_liquidity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = run_liquidity_tracker()
         if data:
             await update.message.reply_text(format_liquidity_telegram(data),
-                                             parse_mode="HTML")
+                                             parse_mode="HTML",
+                                             reply_markup=MAIN_KEYBOARD)
         else:
             await update.message.reply_text("⚠️ Liquidity data unavailable", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
@@ -362,7 +440,8 @@ async def cmd_exits(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = run_exit_check()
         await update.message.reply_text(
             format_exit_status_telegram(result["positions"], result["alerts"], result["circuit_breaker"]),
-            parse_mode="HTML")
+            parse_mode="HTML",
+            reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/exits error: %s", e)
         await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
@@ -399,7 +478,6 @@ async def cmd_analyse(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         url = args[0]
 
-        # Extract video ID
         import re
         match = re.search(r'(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})', url)
         if not match:
@@ -407,18 +485,15 @@ async def cmd_analyse(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         video_id = match.group(1)
 
-        await update.message.reply_text(f"Downloading transcript + running Sonnet analysis...\nThis takes 30-60s for long videos.", reply_markup=MAIN_KEYBOARD)
+        await update.message.reply_text("Downloading transcript + running Sonnet analysis...\nThis takes 30-60s for long videos.", reply_markup=MAIN_KEYBOARD)
 
-        from social.youtube_free import _download_captions, _analyse_transcript, SONNET_ANALYSIS_PROMPT
-        import requests as req
+        from social.youtube_free import _download_captions, _analyse_transcript
 
-        # Get transcript
         transcript = _download_captions(url, video_id)
         if not transcript or len(transcript) < 100:
             await update.message.reply_text("Could not get transcript for this video. Check if it has captions.", reply_markup=MAIN_KEYBOARD)
             return
 
-        # Get video title
         title = "Unknown"
         try:
             from config import YOUTUBE_API_KEY
@@ -433,15 +508,13 @@ async def cmd_analyse(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(f"Transcript: {len(transcript):,} chars\nTitle: {title}\nAnalysing with Sonnet...", reply_markup=MAIN_KEYBOARD)
 
-        # Analyse — force Sonnet + full transcript
-        result = _analyse_transcript(transcript, title, channel_name="All-In Podcast")  # Use priority channel name to trigger Sonnet
+        result = _analyse_transcript(transcript, title, channel_name="All-In Podcast")
 
         if result and result.get("_essay_format"):
             text = result["summary"]
             header = f"\U0001f4fa <b>VIDEO ANALYSIS</b>\n\U0001f3ac \"{title}\"\n\n"
             full = header + text
 
-            # Split at paragraphs
             max_len = 4000
             if len(full) <= max_len:
                 chunks = [full]
@@ -459,7 +532,6 @@ async def cmd_analyse(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for chunk in chunks:
                 await update.message.reply_text(chunk, parse_mode="HTML", disable_web_page_preview=True, reply_markup=MAIN_KEYBOARD)
         elif result:
-            # JSON format fallback
             import json
             text = json.dumps(result, indent=2, default=str)[:4000]
             await update.message.reply_text(f"<pre>{text}</pre>", parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
@@ -510,7 +582,7 @@ async def cmd_weekly(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show weekly review — performance + accuracy."""
     await update.message.reply_text("Generating weekly review...", reply_markup=MAIN_KEYBOARD)
     try:
-        from outputs import generate_weekly_review, send_telegram, _split_message
+        from outputs import generate_weekly_review, _split_message
         msg = generate_weekly_review()
         if len(msg) > 4000:
             for chunk in _split_message(msg):
@@ -529,7 +601,8 @@ async def cmd_chains(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = run_cross_chain()
         await update.message.reply_text(
             format_cross_chain_telegram(result["data"], result["alerts"]),
-            parse_mode="HTML")
+            parse_mode="HTML",
+            reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/chains error: %s", e)
         await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
@@ -543,7 +616,6 @@ async def cmd_synthesis(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = run_synthesis()
         if "output" in result:
             msg = format_synthesis_telegram(result["output"])
-            # Split if needed
             if len(msg) > 4000:
                 await update.message.reply_text(msg[:4000], parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
                 if len(msg) > 4000:
@@ -564,7 +636,8 @@ async def cmd_supply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = run_supply_flow()
         await update.message.reply_text(
             format_supply_telegram(data["hype"], data["pump_cliff"], data["penalties"]),
-            parse_mode="HTML")
+            parse_mode="HTML",
+            reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/supply error: %s", e)
         await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
@@ -611,21 +684,16 @@ async def cmd_defi(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show recent X smart money signals."""
+    """Show latest X Intel briefing."""
     try:
-        from social.grok_poller import get_recent_x_signals
-        signals = get_recent_x_signals(hours=12, min_strength="medium")
-        if not signals:
-            await update.message.reply_text("No medium/strong X signals in last 12h", reply_markup=MAIN_KEYBOARD)
-            return
-        lines = ["<b>X SMART MONEY (12h)</b>", ""]
-        for s in signals[:10]:
-            sym = s.get("token_symbol") or "?"
-            amt = ""
-            if s.get("amount_usd"):
-                amt = " $" + "{:,.0f}".format(s["amount_usd"])
-            lines.append(s["source_handle"] + " " + s["parsed_type"] + " $" + sym + amt + " [" + s["signal_strength"] + "]")
-        await update.message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+        from x_intel_v4 import get_latest_briefing
+        briefing = get_latest_briefing()
+        if briefing:
+            await update.message.reply_text(
+                "\U0001f4e1 <b>LATEST X INTEL</b>\n\n" + briefing,
+                parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+        else:
+            await update.message.reply_text("No X Intel briefing yet. Next one at the next 4h mark.", reply_markup=MAIN_KEYBOARD)
     except Exception as e:
         log.error("/signals error: %s", e)
         await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
@@ -646,10 +714,48 @@ async def cmd_convergence(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
+async def cmd_deepdive_research(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """The Headband research library: /deepdive [TOKEN] [full]"""
+    import asyncio as _asyncio
+    try:
+        from research.research_manager import get_summary_card, get_full_document_chunks, get_scorecard
+        args = context.args if context.args else []
+
+        if not args:
+            await update.message.reply_text(
+                "\u2501\u2501\u2501 THE HEADBAND \u2501\u2501\u2501\n\n"
+                "Usage:\n"
+                "/deepdive all \u2014 Scorecard\n"
+                "/deepdive BTC \u2014 Summary card\n"
+                "/deepdive BTC full \u2014 Full document\n",
+                reply_markup=MAIN_KEYBOARD)
+            return
+
+        token = args[0].upper()
+
+        if token == "ALL":
+            card = get_scorecard()
+            await update.message.reply_text(card, reply_markup=MAIN_KEYBOARD)
+            return
+
+        if len(args) > 1 and args[1].lower() == "full":
+            chunks = get_full_document_chunks(token)
+            for chunk in chunks:
+                await update.message.reply_text(chunk, reply_markup=MAIN_KEYBOARD)
+                await _asyncio.sleep(0.5)
+            return
+
+        card = get_summary_card(token)
+        await update.message.reply_text(card, reply_markup=MAIN_KEYBOARD)
+    except Exception as e:
+        log.error("/deepdive error: %s", e)
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
+
+
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show v5 commands and ensure persistent keyboard."""
     msg = (
-        "🔥 <b>FIERY EYES v5.1</b>\n\n"
+        "🔥 <b>FIERY EYES v5.2</b>\n\n"
         "<b>Reports:</b>\n"
         "/report — daily intelligence report\n"
         "/cycle — BTC cycle position\n"
@@ -665,7 +771,8 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/yields \u2014 USDC yield opportunities\n"
         "/scores \u2014 auto-updated token scores\n"
         "/analyse URL \u2014 analyse any YouTube video\n"
-        "/deepdive CA \u2014 full token analysis\n"
+        "/deepdive TOKEN \u2014 research summary\n"
+        "/deepdive all \u2014 full scorecard\n"
         "\n"
         "<b>Tracking:</b>\n"
         "/ledger — recent recommendations\n"
@@ -680,9 +787,17 @@ def _run_scheduled():
     """Background thread for scheduled tasks."""
     log.info("Scheduler thread started")
 
+    def job_convergence_check():
+        """Every 30min: check for convergence signals (free — DB only)."""
+        try:
+            from convergence import run_convergence_check
+            run_convergence_check(hours=12, send_to_telegram=True)
+        except Exception as e:
+            log.error("Convergence check failed: %s", e)
+
     def job_4h():
-        """Every 4 hours: update watchlist, check for swaps, send pulse."""
-        log.info("Running 4h job: watchlist + swap detection + pulse")
+        """Every 4 hours: update watchlist, check for swaps, market structure."""
+        log.info("Running 4h job: watchlist + swap detection + market structure")
         try:
             from watchlist import run_watchlist
             run_watchlist(send_to_telegram=False)
@@ -698,50 +813,47 @@ def _run_scheduled():
             run_market_structure()
         except Exception as e:
             log.error("4h market structure failed: %s", e)
-        except Exception as e:
-            log.error("4h swap detection failed: %s", e)
 
-    def job_grok_high():
-        """Every 30 min: poll Tier 1 specialized + HIGH generic accounts."""
-        log.info("Running Grok HIGH tier poll")
+    def job_x_intel():
+        """Every 4h (06,10,14,18,22): X Intel research briefing via Grok + Haiku."""
+        log.info("Running X INTEL briefing")
         try:
-            from social.grok_poller import run_smart_money_poll_high
-            result = run_smart_money_poll_high()
-            log.info("Grok HIGH: %d new signals", result.get("total_signals", 0))
+            from x_intel_v4 import run_x_intel_batch
+            result = run_x_intel_batch(send_to_telegram=True)
+            log.info("X INTEL: %s (%d raw chars, %d summary words)",
+                     result.get("status"), result.get("raw_chars", 0),
+                     result.get("summary_words", 0))
         except Exception as e:
-            log.error("Grok HIGH poll failed: %s", e)
-        # Check convergence after polling
-        try:
-            from convergence import run_convergence_check
-            run_convergence_check(hours=12, send_to_telegram=True)
-        except Exception as e:
-            log.error("Convergence check failed: %s", e)
+            log.error("X INTEL briefing failed: %s", e)
 
-    def job_grok_medium():
-        """Every 2 hours: poll MEDIUM generic accounts."""
-        log.info("Running Grok MEDIUM tier poll")
-        try:
-            from social.grok_poller import run_smart_money_poll_medium
-            result = run_smart_money_poll_medium()
-            log.info("Grok MEDIUM: %d new signals", result.get("total_signals", 0))
-        except Exception as e:
-            log.error("Grok MEDIUM poll failed: %s", e)
-
-    def job_youtube():
-        """Every 2 hours: scan YouTube channels for new videos."""
-        log.info("Running YouTube scan")
+    def job_youtube_scan():
+        """Every 2h: scan all channels for new videos, analyse, store in DB.
+        NO individual Telegram messages — best findings go into Morning/Evening reports."""
+        log.info("Running YouTube auto-scan")
         try:
             from social.youtube_free import run_youtube_scan
-            run_youtube_scan()
+            result = run_youtube_scan(send_alerts=False)
+            if result:
+                log.info("YouTube scan: %d new videos processed", result.get("new_videos", 0))
         except Exception as e:
             log.error("YouTube scan failed: %s", e)
 
+    def job_nimbus_sync():
+        """05:45 UTC: Sync Nimbus data from Jingubang (after autopull at 05:30)."""
+        try:
+            from nimbus_sync import run_sync
+            result = run_sync()
+            log.info("Nimbus sync: %s (as_of: %s)", result["status"], result.get("as_of_date"))
+        except Exception as e:
+            log.error("Nimbus sync failed: %s", e)
+
     def job_morning_brief():
-        """06:00 UTC (6am UK): Full morning brief — overnight synthesis, what to watch."""
+        """06:00 UTC: Full morning brief — report + synthesis."""
         log.info("Running MORNING BRIEF")
         try:
             from daily_report import generate_report
-            generate_report(send_to_telegram=True, report_type="morning")
+            report = generate_report(send_to_telegram=False, report_type="morning")
+            send_telegram_with_keyboard(report)
         except Exception as e:
             log.error("Morning brief report failed: %s", e)
         try:
@@ -755,8 +867,10 @@ def _run_scheduled():
         except Exception as e:
             log.error("Morning scores failed: %s", e)
         try:
-            from synthesis import run_synthesis
-            run_synthesis(send_to_telegram=True)
+            from synthesis import run_synthesis, format_synthesis_telegram
+            result = run_synthesis()
+            if result.get("output"):
+                send_telegram_with_keyboard(format_synthesis_telegram(result["output"]))
         except Exception as e:
             log.error("Morning synthesis failed: %s", e)
         try:
@@ -766,113 +880,84 @@ def _run_scheduled():
             log.error("Morning rec logging failed: %s", e)
 
     def job_evening_review():
-        """20:00 UTC (8pm UK): Evening review — day recap, changes, actions."""
+        """20:00 UTC: Evening review — day recap, changes, actions."""
         log.info("Running EVENING REVIEW")
         try:
             from daily_report import generate_report
-            generate_report(send_to_telegram=True, report_type="evening")
+            report = generate_report(send_to_telegram=False, report_type="evening")
+            send_telegram_with_keyboard(report)
         except Exception as e:
             log.error("Evening review report failed: %s", e)
-
-    # Schedule jobs
-    schedule.every(30).minutes.do(job_grok_high)
-    schedule.every(2).hours.do(job_grok_medium)
-    schedule.every(2).hours.do(job_youtube)
-    schedule.every(4).hours.do(job_4h)
-    schedule.every().day.at("06:00").do(job_x_intel)
-    schedule.every().day.at("10:00").do(job_x_intel)
-    schedule.every().day.at("14:00").do(job_x_intel)
-    schedule.every().day.at("18:00").do(job_x_intel)
-    schedule.every().day.at("22:00").do(job_x_intel)
-    def job_x_intel():
-        """Every 4h (06,10,14,18,22): consolidated X intelligence batch."""
-        log.info("Running X INTEL batch")
-        try:
-            from db.connection import execute
-            # Get X signals from last 4 hours for watchlist tokens
-            watchlist = {"JUP","HYPE","RENDER","BONK","SOL","BTC","PUMP","PENGU","FARTCOIN"}
-            rows = execute("""
-                SELECT token_symbol, source_handle, parsed_type, amount_usd,
-                       signal_strength, signal_category
-                FROM x_intelligence
-                WHERE detected_at > NOW() - INTERVAL '4 hours'
-                  AND signal_strength IN ('medium', 'strong')
-                  AND token_symbol IS NOT NULL
-                ORDER BY detected_at DESC
-            """, fetch=True)
-
-            if not rows:
-                log.info("X INTEL: nothing notable in last 4h, skipping")
-                return
-
-            wl_signals = []
-            macro_signals = []
-            large_signals = []
-            for token, source, ptype, amount, strength, category in rows:
-                tok = (token or "").upper()
-                entry = f"{source}: {ptype} ${tok}"
-                if amount and amount > 0 and amount < 1e11:
-                    entry += f" (${amount:,.0f})"
-                entry += f" [{strength}]"
-
-                if tok in watchlist:
-                    wl_signals.append(entry)
-                elif category in ("macro", "geopolitical", "regulation"):
-                    macro_signals.append(entry)
-                elif amount and amount >= 5_000_000:
-                    large_signals.append(entry)
-
-            if not wl_signals and not macro_signals and not large_signals:
-                log.info("X INTEL: no watchlist/macro/large signals, skipping")
-                return
-
-            from datetime import datetime, timezone
-            now = datetime.now(timezone.utc).strftime("%H:%M UTC")
-            lines = [f"\U0001f4e1 <b>X INTEL \u2014 {now}</b>", ""]
-
-            if wl_signals:
-                lines.append("<b>Watchlist:</b>")
-                for s in wl_signals[:8]:
-                    lines.append(f"  {s}")
-
-            if macro_signals:
-                lines.append("\n<b>Macro/Geo:</b>")
-                for s in macro_signals[:5]:
-                    lines.append(f"  {s}")
-
-            if large_signals:
-                lines.append("\n<b>Notable (>$5M):</b>")
-                for s in large_signals[:3]:
-                    lines.append(f"  {s}")
-
-            msg = "\n".join(lines)
-
-            import requests as req
-            from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-            req.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-                json={"chat_id": TELEGRAM_CHAT_ID, "text": msg,
-                      "parse_mode": "HTML", "disable_web_page_preview": True}, timeout=15)
-            log.info("X INTEL batch sent: %d watchlist, %d macro, %d large",
-                     len(wl_signals), len(macro_signals), len(large_signals))
-        except Exception as e:
-            log.error("X INTEL batch failed: %s", e)
 
     def job_weekly():
         """Weekly: cross-chain + full review."""
         log.info("Running weekly review")
         try:
-            from outputs import send_weekly
-            send_weekly()
+            from outputs import generate_weekly_review
+            msg = generate_weekly_review()
+            send_telegram_with_keyboard(msg)
         except Exception as e:
             log.error("Weekly review failed: %s", e)
 
-    schedule.every().sunday.at("08:00").do(job_weekly)
+    # ━━━ SCHEDULE ━━━
+    # Data collection
+    # Grok polling removed — $0.55/call x_search surcharge
+    schedule.every(30).minutes.do(job_convergence_check)
+    schedule.every(4).hours.do(job_4h)
+
+    # Nimbus sync (before morning brief)
+    schedule.every().day.at("05:45").do(job_nimbus_sync)
+
+    # Morning Brief: 06:00 UTC (full report + synthesis)
     schedule.every().day.at("06:00").do(job_morning_brief)
+
+    # X Intel: every 4h batched
+    schedule.every().day.at("06:00").do(job_x_intel)
+    schedule.every().day.at("10:00").do(job_x_intel)
+    schedule.every().day.at("14:00").do(job_x_intel)
+    schedule.every().day.at("18:00").do(job_x_intel)
+    schedule.every().day.at("22:00").do(job_x_intel)
+
+    # Evening Review: 20:00 UTC
     schedule.every().day.at("20:00").do(job_evening_review)
 
-    # Run watchlist + first Grok poll on startup
+    # Weekly: Sunday 08:00 UTC
+    schedule.every().sunday.at("08:00").do(job_weekly)
+
+    # YouTube: every 2h scan, no individual Telegram sends
+    schedule.every(2).hours.do(job_youtube_scan)
+    # H-Fire alerts: immediate via convergence check in job_grok_high
+
+    # Run initial data collection on startup
     job_4h()
-    job_grok_high()
+
+
+    # Grace period: if we started within 30min of a scheduled slot, run it
+    now_utc = datetime.now(timezone.utc)
+    hour_min = now_utc.hour * 60 + now_utc.minute
+    # Morning brief at 06:00 = 360min
+    if 360 <= hour_min <= 390:
+        log.info("Startup within morning brief window — running brief")
+        job_nimbus_sync()
+        job_morning_brief()
+        job_x_intel()
+    # Evening review at 20:00 = 1200min
+    elif 1200 <= hour_min <= 1230:
+        log.info("Startup within evening review window — running review")
+        job_evening_review()
+
+    log.info("Schedule configured:")
+    log.info("  05:45  Nimbus sync")
+    log.info("  06:00  Morning Brief + X Intel")
+    log.info("  10:00  X Intel")
+    log.info("  14:00  X Intel")
+    log.info("  18:00  X Intel")
+    log.info("  20:00  Evening Review")
+    log.info("  22:00  X Intel")
+    log.info("  Sun 08:00  Weekly")
+    log.info("  Every 2h   YouTube scan")
+    log.info("  Every 30m  Convergence check")
+    log.info("  Every 4h   Watchlist + swaps")
 
     while True:
         schedule.run_pending()
@@ -888,7 +973,7 @@ def main():
         log.error("TELEGRAM_BOT_TOKEN not set")
         return
 
-    log.info("Starting Fiery Eyes v5.1 bot...")
+    log.info("Starting Fiery Eyes v5.2 bot...")
 
     # Start SunFlow Telegram listener in background thread
     def _run_sunflow():
@@ -909,6 +994,7 @@ def main():
     # Build and start Telegram bot
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
+    # Command handlers
     app.add_handler(CommandHandler("report", cmd_report))
     app.add_handler(CommandHandler("cycle", cmd_cycle))
     app.add_handler(CommandHandler("watchlist", cmd_watchlist))
@@ -924,8 +1010,8 @@ def main():
     app.add_handler(CommandHandler("scores", cmd_scores))
     app.add_handler(CommandHandler("analyse", cmd_analyse))
     app.add_handler(CommandHandler("analyze", cmd_analyse))
-    app.add_handler(CommandHandler("deepdive", cmd_deepdive))
-    app.add_handler(CommandHandler("dd", cmd_deepdive))
+    app.add_handler(CommandHandler("deepdive", cmd_deepdive_research))
+    app.add_handler(CommandHandler("dd", cmd_deepdive_research))
     app.add_handler(CommandHandler("pulse", cmd_pulse))
     app.add_handler(CommandHandler("weekly", cmd_weekly))
     app.add_handler(CommandHandler("chains", cmd_chains))
@@ -938,11 +1024,13 @@ def main():
     app.add_handler(CommandHandler("convergence", cmd_convergence))
     app.add_handler(CommandHandler("menu", cmd_menu))
     app.add_handler(CommandHandler("help", cmd_help))
+    app.add_handler(CommandHandler("start", cmd_help))
+
+    # Callback and menu handlers
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(
         filters.TEXT & filters.Regex(r'^(📊 Intel|🐋 Signals|💼 Portfolio|📈 Market|🔧 Tools)$'),
         handle_menu_text))
-    app.add_handler(CommandHandler("start", cmd_help))
 
     async def post_init(application):
         from telegram import BotCommand
