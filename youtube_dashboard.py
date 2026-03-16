@@ -1,4 +1,4 @@
-"""YouTube Dashboard — summary view for the Intel > YouTube button."""
+"""youtube_dashboard.py — YouTube summary dashboard with emojis."""
 import json
 from datetime import datetime, timezone
 from db.connection import execute
@@ -6,48 +6,38 @@ from config import get_logger
 
 log = get_logger("youtube_dashboard")
 
+HIGH_PRIORITY = {
+    "All-In Podcast", "Lex Fridman", "Principles by Ray Dalio",
+    "Real Vision Finance", "Real Vision", "Raoul Pal",
+    "Impact Theory", "PowerfulJRE",
+    "The Diary Of A CEO", "Diary of a CEO",
+    "InvestAnswers", "Benjamin Cowen", "Coin Bureau",
+    "Bankless", "Crypto Banter", "VirtualBacon", "Virtual Bacon",
+    "Mark Moss", "ColinTalksCrypto", "Colin Talks Crypto",
+    "Krypto King", "Chart Fanatics", "Crypto Insider",
+    "Jack Neel", "Titans of Tomorrow",
+}
 
-def generate_youtube_dashboard() -> str:
-    """Generate YouTube summary dashboard (not full analyses)."""
-    # Get all videos from last 24h
+
+def generate_youtube_dashboard():
     rows = execute("""
-        SELECT channel_name, title, processed_at, analysis_json, relevance_score,
-               tokens_mentioned
-        FROM youtube_videos
-        WHERE processed_at > NOW() - INTERVAL '24 hours'
+        SELECT channel_name, title, processed_at, analysis_json, relevance_score, tokens_mentioned
+        FROM youtube_videos WHERE processed_at > NOW() - INTERVAL '24 hours'
         ORDER BY relevance_score DESC NULLS LAST, processed_at DESC
     """, fetch=True)
 
     if not rows:
-        return "📺 No YouTube videos analysed in last 24h."
+        return "\U0001f4fa No YouTube videos analysed in last 24h."
 
     total = len(rows)
-    sonnet = 0
-    haiku = 0
+    sonnet = sum(1 for r in rows if r[0] in HIGH_PRIORITY)
+    haiku = total - sonnet
     token_counts = {}
     highlights = []
-    all_summaries = []
-
-    HIGH_PRIORITY = {
-        "All-In Podcast", "Lex Fridman", "Principles by Ray Dalio",
-        "Real Vision Finance", "Real Vision", "Raoul Pal",
-        "Impact Theory", "PowerfulJRE",
-        "The Diary Of A CEO", "Diary of a CEO",
-        "InvestAnswers", "Benjamin Cowen", "Coin Bureau",
-        "Bankless", "Crypto Banter", "VirtualBacon", "Virtual Bacon",
-        "Mark Moss", "ColinTalksCrypto", "Colin Talks Crypto",
-        "Krypto King", "Chart Fanatics", "Crypto Insider",
-        "Jack Neel", "Titans of Tomorrow",
-    }
 
     for ch, title, ts, analysis_json, rel, tokens_str in rows:
         is_sonnet = ch in HIGH_PRIORITY
-        if is_sonnet:
-            sonnet += 1
-        else:
-            haiku += 1
 
-        # Count token mentions
         if tokens_str:
             try:
                 tokens = json.loads(tokens_str) if isinstance(tokens_str, str) else tokens_str
@@ -60,7 +50,6 @@ def generate_youtube_dashboard() -> str:
             except Exception:
                 pass
 
-        # Extract one-line takeaway for highlights (Sonnet only, top 5)
         if is_sonnet and len(highlights) < 5:
             takeaway = ""
             if analysis_json:
@@ -72,7 +61,6 @@ def generate_youtube_dashboard() -> str:
                         aj = {}
                 summary = aj.get("summary", "")
                 if summary:
-                    # Get first sentence
                     for line in summary.split("\n"):
                         line = line.strip()
                         if line and not line.startswith("**") and not line.startswith("#") and len(line) > 30:
@@ -81,30 +69,31 @@ def generate_youtube_dashboard() -> str:
                                 takeaway = takeaway.rsplit(" ", 1)[0] + "..."
                             break
             if not takeaway:
-                takeaway = title[:80] if title else "Analysis available"
-            highlights.append((ch, title[:45], takeaway))
+                takeaway = (title or "")[:80]
+            ts_str = ts.strftime("%H:%M") if ts else "?"
+            highlights.append((ch, title[:45], takeaway, ts_str))
 
-    # Build output
     lines = []
-    lines.append("📺 YOUTUBE TODAY — %d videos (%d Sonnet, %d Haiku)\n" % (total, sonnet, haiku))
+    lines.append("\U0001f4fa <b>YOUTUBE TODAY</b> \u2014 %d videos (%d Sonnet, %d Haiku)" % (total, sonnet, haiku))
+    lines.append("")
 
-    # Top mentioned tokens
     if token_counts:
-        sorted_tokens = sorted(token_counts.items(), key=lambda x: x[1], reverse=True)[:6]
-        lines.append("TOP MENTIONS:")
-        for sym, count in sorted_tokens:
-            lines.append("  %s: %d videos" % (sym, count))
+        sorted_t = sorted(token_counts.items(), key=lambda x: x[1], reverse=True)[:8]
+        lines.append("\U0001f4cc <b>TOP MENTIONS</b>")
+        for sym, count in sorted_t:
+            e = "\U0001f525" if count >= 5 else "\U0001f53a" if count >= 3 else "\u2022"
+            lines.append("  %s %s: %d videos" % (e, sym, count))
         lines.append("")
 
-    # Sonnet highlights
     if highlights:
-        lines.append("SONNET HIGHLIGHTS:")
-        for ch, title, takeaway in highlights:
-            lines.append("📺 %s — \"%s\"" % (ch, title))
+        lines.append("\U0001f3ac <b>SONNET HIGHLIGHTS</b>")
+        for ch, title, takeaway, ts in highlights:
+            lines.append("\U0001f4fa %s \u2014 %s" % (ch, ts))
+            lines.append('   \U0001f3ac "%s"' % title)
             lines.append("   %s" % takeaway)
-        lines.append("")
+            lines.append("")
 
-    lines.append("Full analyses arrive as individual messages (Sonnet)")
-    lines.append("Use /analyse [URL] for on-demand deep analysis")
+    lines.append("\U0001f4e8 Full Sonnet analyses arrive as individual messages")
+    lines.append("\U0001f50d Use /analyse [URL] for on-demand deep analysis")
 
     return "\n".join(lines)

@@ -247,24 +247,45 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "v6_macro":
         try:
             from nimbus_sync import get_nimbus_data
-            nd = get_nimbus_data() or {}
-            pmi = nd.get("pmi", {})
-            cpi = nd.get("cpi", {})
-            rates = nd.get("rates", {})
-            unemp = nd.get("unemployment", {})
-            truf = nd.get("truflation", {})
-            gw = pmi.get("global_weighted", [])
-            us_pmi = pmi.get("us", [])
-            fed = rates.get("fed", {})
-            lines = ["MACRO DASHBOARD\n"]
-            lines.append("PMI: US %s | Global %s" % (us_pmi[-1] if us_pmi else "?", gw[-1] if gw else "?"))
-            us_cpi = cpi.get("us", [])
-            lines.append("CPI: US %s%% | Truflation %s%%" % (us_cpi[-1] if us_cpi else "?", truf.get("current", "?")))
-            lines.append("Rates: Fed %s%% (next: %s)" % (fed.get("rate", "?"), fed.get("next", "?")))
-            us_ue = unemp.get("us", [])
-            lines.append("Unemployment: US %s%%" % (us_ue[-1] if us_ue else "?"))
-            lines.append("\nNimbus as_of: %s" % nd.get("meta", {}).get("as_of_date", "?"))
-            await context.bot.send_message(query.message.chat_id, "\n".join(lines), reply_markup=MAIN_KEYBOARD)
+            from nimbus_engine import compute_nimbus
+            from macro_display import generate_macro_signal
+            nd = get_nimbus_data()
+            if nd:
+                state = compute_nimbus(nd)
+                text = generate_macro_signal(nd, state)
+                # Add sub-buttons for detail tables
+                detail_kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("PMI", callback_data="macro_pmi"),
+                     InlineKeyboardButton("CPI", callback_data="macro_cpi"),
+                     InlineKeyboardButton("GDP", callback_data="macro_gdp"),
+                     InlineKeyboardButton("Key Dates", callback_data="macro_dates")],
+                ])
+                await context.bot.send_message(query.message.chat_id, text, reply_markup=detail_kb)
+            else:
+                await context.bot.send_message(query.message.chat_id, "Nimbus data not synced yet. Run nimbus_sync.", reply_markup=MAIN_KEYBOARD)
+        except Exception as e:
+            await context.bot.send_message(query.message.chat_id, "Macro error: " + str(e), reply_markup=MAIN_KEYBOARD)
+
+    elif data.startswith("macro_"):
+        table = data[6:]  # pmi, cpi, gdp, dates
+        try:
+            from nimbus_sync import get_nimbus_data
+            from macro_display import generate_pmi_table, generate_cpi_table, generate_gdp_table, generate_key_dates
+            nd = get_nimbus_data()
+            if nd:
+                if table == "pmi":
+                    text = generate_pmi_table(nd)
+                elif table == "cpi":
+                    text = generate_cpi_table(nd)
+                elif table == "gdp":
+                    text = generate_gdp_table(nd)
+                elif table == "dates":
+                    text = generate_key_dates(nd)
+                else:
+                    text = "Unknown table: " + table
+                await context.bot.send_message(query.message.chat_id, text, reply_markup=MAIN_KEYBOARD)
+            else:
+                await context.bot.send_message(query.message.chat_id, "Nimbus data not available", reply_markup=MAIN_KEYBOARD)
         except Exception as e:
             await context.bot.send_message(query.message.chat_id, "Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 

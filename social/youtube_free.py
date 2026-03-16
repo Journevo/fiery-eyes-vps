@@ -471,7 +471,13 @@ def _analyse_transcript(transcript: str, video_title: str = "", channel_name: st
 
     # Sonnet for all priority channels, Haiku for the rest. No keyword filter.
     model = SONNET_MODEL if channel_name in HIGH_PRIORITY else HAIKU_MODEL
-    log.info("Analysis model: %s for channel: %s", model, channel_name)
+
+    # SHORT override: < 2000 chars = always Haiku (saves ~$0.08 per short)
+    if len(transcript) < 2000 and model == SONNET_MODEL:
+        log.info("SHORT detected (%d chars) -> Haiku override for %s", len(transcript), channel_name)
+        model = HAIKU_MODEL
+    else:
+        log.info("Analysis model: %s for channel: %s", model, channel_name)
     if not ANTHROPIC_API_KEY:
         log.error("ANTHROPIC_API_KEY not set — cannot analyse")
         return None
@@ -949,7 +955,7 @@ def process_video(channel_name: str, video: dict, send_alert: bool = True) -> di
                ON CONFLICT (video_id) DO NOTHING""",
             (
                 video_id, channel_name, video_title, published_at,
-                transcript[:5000] if transcript else None,
+                transcript if transcript else None,
                 json.dumps(analysis),
                 relevance,
                 json.dumps(tokens_mentioned),
