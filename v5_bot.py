@@ -1078,7 +1078,7 @@ def _run_scheduled():
             log.error("Morning rec logging failed: %s", e)
 
     def job_evening_review():
-        """20:00 UTC: Evening review — day recap, changes, actions."""
+        """20:00 UTC: Evening review + notebook auto-send."""
         log.info("Running EVENING REVIEW")
         try:
             from daily_report import generate_report
@@ -1086,6 +1086,13 @@ def _run_scheduled():
             send_telegram_with_keyboard(report)
         except Exception as e:
             log.error("Evening review report failed: %s", e)
+        # Auto-send notebook for Opus paste
+        log.info("Auto-sending notebook")
+        try:
+            from notebook import send_notebook
+            send_notebook()
+        except Exception as e:
+            log.error("Notebook auto-send failed: %s", e)
 
     def job_weekly():
         """Weekly: cross-chain + full review."""
