@@ -507,7 +507,7 @@ Next deep review: 22 March 2026 (Sunday weekly cycle)
 ## TELEGRAM SUMMARY CARD
 
 ```
-━━━ SOL — 82/100 ━━━
+=== SOL — 82/100 ===
 $88.50 | ATH $293 (-70%)
 Thesis: The engine. Jingubang's primary asset.
 70% off the best L1 in crypto. Fundamentals intact.

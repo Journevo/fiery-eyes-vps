@@ -37,14 +37,14 @@ log = get_logger("v5_bot")
 
 # Persistent reply keyboard — always visible at bottom of chat
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
-    [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    [["📊 Intel", "🐋 Signals", "🔥 Fiery Eyes"], ["💼 Portfolio", "⚙️ System"]],
     resize_keyboard=True,
     is_persistent=True,
 )
 
 # Keyboard as JSON for raw API calls (scheduled sends)
 MAIN_KEYBOARD_JSON = {
-    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "keyboard": [["📊 Intel", "🐋 Signals", "🔥 Fiery Eyes"], ["💼 Portfolio", "⚙️ System"]],
     "resize_keyboard": True,
     "is_persistent": True,
 }
@@ -111,58 +111,53 @@ def send_telegram_with_keyboard(text: str, parse_mode: str = "HTML"):
 # Persistent menu handlers
 # ---------------------------------------------------------------------------
 async def handle_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle persistent keyboard button taps."""
+    """Handle V6 persistent keyboard button taps."""
     text = update.message.text
 
     if text == "📊 Intel":
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Synthesis", callback_data="cmd_synthesis"),
-            InlineKeyboardButton("Cycle", callback_data="cmd_cycle"),
-            InlineKeyboardButton("Liquidity", callback_data="cmd_liquidity"),
-            InlineKeyboardButton("Report", callback_data="cmd_report"),
-        ]])
-        await update.message.reply_text("📊 <b>Intelligence</b>", parse_mode="HTML",
-                                         reply_markup=keyboard)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("YouTube", callback_data="v6_yt_dash"),
+             InlineKeyboardButton("Macro", callback_data="v6_macro"),
+             InlineKeyboardButton("Liquidity", callback_data="cmd_liquidity"),
+             InlineKeyboardButton("Chain", callback_data="cmd_defi")],
+        ])
+        await update.message.reply_text("📊 <b>Intelligence</b>", parse_mode="HTML", reply_markup=keyboard)
 
     elif text == "🐋 Signals":
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Whale", callback_data="cmd_sunflow"),
-            InlineKeyboardButton("Smart Money", callback_data="cmd_signals"),
-            InlineKeyboardButton("YouTube", callback_data="cmd_youtube"),
-            InlineKeyboardButton("Supply", callback_data="cmd_supply"),
-        ]])
-        await update.message.reply_text("🐋 <b>Signals</b>", parse_mode="HTML",
-                                         reply_markup=keyboard)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Market", callback_data="cmd_market"),
+             InlineKeyboardButton("Whale", callback_data="cmd_sunflow"),
+             InlineKeyboardButton("Discovery", callback_data="v6_discovery"),
+             InlineKeyboardButton("Unlocks", callback_data="cmd_supply")],
+        ])
+        await update.message.reply_text("🐋 <b>Signals</b>", parse_mode="HTML", reply_markup=keyboard)
+
+    elif text == "🔥 Fiery Eyes":
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Morning", callback_data="cmd_report"),
+             InlineKeyboardButton("Evening", callback_data="v6_evening"),
+             InlineKeyboardButton("Notebook", callback_data="v6_notebook"),
+             InlineKeyboardButton("Cycle", callback_data="v6_cycle")],
+        ])
+        await update.message.reply_text("🔥 <b>Fiery Eyes</b>", parse_mode="HTML", reply_markup=keyboard)
 
     elif text == "💼 Portfolio":
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Positions", callback_data="cmd_portfolio"),
-            InlineKeyboardButton("PnL", callback_data="cmd_pnl"),
-            InlineKeyboardButton("Bought", callback_data="tool_bought"),
-            InlineKeyboardButton("Sold", callback_data="tool_sold"),
-        ]])
-        await update.message.reply_text("💼 <b>Portfolio</b>", parse_mode="HTML",
-                                         reply_markup=keyboard)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Positions", callback_data="cmd_portfolio"),
+             InlineKeyboardButton("Deep Dive", callback_data="cmd_deepdive"),
+             InlineKeyboardButton("Trades", callback_data="cmd_ledger"),
+             InlineKeyboardButton("Risk", callback_data="cmd_pnl")],
+        ])
+        await update.message.reply_text("💼 <b>Portfolio</b>", parse_mode="HTML", reply_markup=keyboard)
 
-    elif text == "📈 Market":
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Watchlist", callback_data="cmd_watchlist"),
-            InlineKeyboardButton("DeFi", callback_data="cmd_defi"),
-            InlineKeyboardButton("Market", callback_data="cmd_market"),
-            InlineKeyboardButton("Chains", callback_data="cmd_chains"),
-        ]])
-        await update.message.reply_text("📈 <b>Market</b>", parse_mode="HTML",
-                                         reply_markup=keyboard)
-
-    elif text == "🔧 Tools":
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Analyse URL", callback_data="tool_analyse"),
-            InlineKeyboardButton("Deepdive", callback_data="cmd_deepdive"),
-            InlineKeyboardButton("Ledger", callback_data="cmd_ledger"),
-            InlineKeyboardButton("Help", callback_data="tool_help"),
-        ]])
-        await update.message.reply_text("🔧 <b>Tools</b>", parse_mode="HTML",
-                                         reply_markup=keyboard)
+    elif text == "⚙️ System":
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Health", callback_data="v6_health"),
+             InlineKeyboardButton("YT Health", callback_data="v6_yt_health"),
+             InlineKeyboardButton("Costs", callback_data="v6_costs"),
+             InlineKeyboardButton("Help", callback_data="tool_help")],
+        ])
+        await update.message.reply_text("⚙️ <b>System</b>", parse_mode="HTML", reply_markup=keyboard)
 
     else:
         log.info("Unrecognized menu text: %s", repr(text))
@@ -241,6 +236,151 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Send: /sold TOKEN AMOUNT PRICE\nExample: /sold JUP 500 0.25",
             reply_markup=MAIN_KEYBOARD)
 
+    elif data == "v6_yt_dash":
+        try:
+            from youtube_dashboard import generate_youtube_dashboard
+            text = generate_youtube_dashboard()
+            await context.bot.send_message(query.message.chat_id, text, reply_markup=MAIN_KEYBOARD)
+        except Exception as e:
+            await context.bot.send_message(query.message.chat_id, "Error: " + str(e), reply_markup=MAIN_KEYBOARD)
+
+    elif data == "v6_macro":
+        try:
+            from nimbus_sync import get_nimbus_data
+            nd = get_nimbus_data() or {}
+            pmi = nd.get("pmi", {})
+            cpi = nd.get("cpi", {})
+            rates = nd.get("rates", {})
+            unemp = nd.get("unemployment", {})
+            truf = nd.get("truflation", {})
+            gw = pmi.get("global_weighted", [])
+            us_pmi = pmi.get("us", [])
+            fed = rates.get("fed", {})
+            lines = ["MACRO DASHBOARD\n"]
+            lines.append("PMI: US %s | Global %s" % (us_pmi[-1] if us_pmi else "?", gw[-1] if gw else "?"))
+            us_cpi = cpi.get("us", [])
+            lines.append("CPI: US %s%% | Truflation %s%%" % (us_cpi[-1] if us_cpi else "?", truf.get("current", "?")))
+            lines.append("Rates: Fed %s%% (next: %s)" % (fed.get("rate", "?"), fed.get("next", "?")))
+            us_ue = unemp.get("us", [])
+            lines.append("Unemployment: US %s%%" % (us_ue[-1] if us_ue else "?"))
+            lines.append("\nNimbus as_of: %s" % nd.get("meta", {}).get("as_of_date", "?"))
+            await context.bot.send_message(query.message.chat_id, "\n".join(lines), reply_markup=MAIN_KEYBOARD)
+        except Exception as e:
+            await context.bot.send_message(query.message.chat_id, "Error: " + str(e), reply_markup=MAIN_KEYBOARD)
+
+    elif data == "v6_cycle":
+        try:
+            from cycle_screen import generate_cycle_screen
+            text = generate_cycle_screen()
+            await context.bot.send_message(query.message.chat_id, text, reply_markup=MAIN_KEYBOARD)
+        except Exception as e:
+            await context.bot.send_message(query.message.chat_id, "Error: " + str(e), reply_markup=MAIN_KEYBOARD)
+
+    elif data == "v6_notebook":
+        await context.bot.send_message(query.message.chat_id, "Generating notebook (30-60s)...", reply_markup=MAIN_KEYBOARD)
+        try:
+            from notebook import generate_notebook, send_notebook
+            send_notebook()
+        except Exception as e:
+            await context.bot.send_message(query.message.chat_id, "Error: " + str(e), reply_markup=MAIN_KEYBOARD)
+
+    elif data == "v6_evening":
+        try:
+            from db.connection import execute_one
+            row = execute_one("SELECT raw_output FROM synthesis ORDER BY created_at DESC LIMIT 1")
+            if row and row[0]:
+                await context.bot.send_message(query.message.chat_id, row[0][:4000], reply_markup=MAIN_KEYBOARD)
+            else:
+                await context.bot.send_message(query.message.chat_id, "No evening review available yet.", reply_markup=MAIN_KEYBOARD)
+        except Exception as e:
+            await context.bot.send_message(query.message.chat_id, "Error: " + str(e), reply_markup=MAIN_KEYBOARD)
+
+    elif data == "v6_health":
+        try:
+            from system_health import generate_health_dashboard
+            text = generate_health_dashboard()
+            await context.bot.send_message(query.message.chat_id, text, reply_markup=MAIN_KEYBOARD)
+        except Exception as e:
+            await context.bot.send_message(query.message.chat_id, "Error: " + str(e), reply_markup=MAIN_KEYBOARD)
+
+    elif data == "v6_yt_health":
+        try:
+            from youtube_health import generate_health_report
+            text = generate_health_report()
+            await context.bot.send_message(query.message.chat_id, text, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+        except Exception as e:
+            await context.bot.send_message(query.message.chat_id, "Error: " + str(e), reply_markup=MAIN_KEYBOARD)
+
+    elif data == "v6_costs":
+        text = "API COSTS (March 2026)\n\nClaude API: ~$46/mo (YouTube Sonnet/Haiku + Intel Briefing)\nHetzner VPS: $8/mo\nGrok: $0 (disabled)\nTotal: ~$54/mo"
+        await context.bot.send_message(query.message.chat_id, text, reply_markup=MAIN_KEYBOARD)
+
+    elif data == "v6_discovery":
+        try:
+            from db.connection import execute as db_exec
+            rows = db_exec("""
+                SELECT token_symbol, COUNT(*) as cnt, COUNT(DISTINCT channel_name) as channels
+                FROM (
+                    SELECT unnest(
+                        CASE WHEN tokens_mentioned IS NOT NULL
+                        THEN string_to_array(
+                            regexp_replace(tokens_mentioned::text, '[^a-zA-Z,]', '', 'g'), ',')
+                        ELSE ARRAY[]::text[] END
+                    ) as token_symbol, channel_name
+                    FROM youtube_videos WHERE processed_at > NOW() - INTERVAL '48 hours'
+                ) sub
+                WHERE length(token_symbol) BETWEEN 2 AND 10
+                GROUP BY token_symbol HAVING COUNT(DISTINCT channel_name) >= 2
+                ORDER BY COUNT(DISTINCT channel_name) DESC, COUNT(*) DESC LIMIT 10
+            """, fetch=True)
+            if rows:
+                lines = ["DISCOVERY (48h YouTube mentions)\n"]
+                for r in rows:
+                    sym = (r[0] or "").upper()
+                    if not sym:
+                        continue
+                    lines.append("%s: %d mentions from %d channels" % (sym, r[1], r[2]))
+                text = "\n".join(lines)
+            else:
+                text = "No multi-channel token mentions in 48h"
+            await context.bot.send_message(query.message.chat_id, text, reply_markup=MAIN_KEYBOARD)
+        except Exception as e:
+            await context.bot.send_message(query.message.chat_id, "Discovery: " + str(e), reply_markup=MAIN_KEYBOARD)
+
+    elif data.startswith("ddf_"):
+        # Full document request
+        token = data[4:]
+        try:
+            import asyncio as _aio
+            from research.research_manager import get_full_document_chunks
+            chunks = get_full_document_chunks(token)
+            for chunk in chunks:
+                await context.bot.send_message(
+                    query.message.chat_id, chunk,
+                    reply_markup=MAIN_KEYBOARD)
+                await _aio.sleep(0.5)
+        except Exception as e:
+            await context.bot.send_message(
+                query.message.chat_id, "Error: " + str(e),
+                reply_markup=MAIN_KEYBOARD)
+
+    elif data.startswith("dd_"):
+        token = data[3:]
+        try:
+            from research.research_manager import get_summary_card, get_scorecard
+            if token == "ALL":
+                text = get_scorecard()
+            else:
+                text = get_summary_card(token)
+                text += "\n\nTap \"Full\" above or /deepdive %s full for complete doc" % token
+            await context.bot.send_message(
+                query.message.chat_id, text,
+                reply_markup=MAIN_KEYBOARD)
+        except Exception as e:
+            await context.bot.send_message(
+                query.message.chat_id, "Error: " + str(e),
+                reply_markup=MAIN_KEYBOARD)
+
     elif data == "tool_help":
         class FakeMessage2:
             def __init__(self, cid, bot):
@@ -260,7 +400,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show the persistent keyboard menu."""
     await update.message.reply_text(
-        "🔥 <b>FIERY EYES v5.2</b>\nTap a button below:",
+        "🔥 <b>FIERY EYES v6.0</b>\nTap a button below:",
         parse_mode="HTML",
         reply_markup=MAIN_KEYBOARD)
 
@@ -752,10 +892,30 @@ async def cmd_deepdive_research(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
+async def cmd_notebook(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Generate and send the daily notebook for Opus."""
+    await update.message.reply_text("Generating notebook...", reply_markup=MAIN_KEYBOARD)
+    try:
+        from notebook import send_notebook
+        send_notebook()
+    except Exception as e:
+        log.error("/notebook error: %s", e)
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
+
+
+async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show system health dashboard."""
+    try:
+        from system_health import generate_health_dashboard
+        await update.message.reply_text(generate_health_dashboard(), reply_markup=MAIN_KEYBOARD)
+    except Exception as e:
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
+
+
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show v5 commands and ensure persistent keyboard."""
     msg = (
-        "🔥 <b>FIERY EYES v5.2</b>\n\n"
+        "🔥 <b>FIERY EYES v6.0</b>\n\n"
         "<b>Reports:</b>\n"
         "/report — daily intelligence report\n"
         "/cycle — BTC cycle position\n"
@@ -816,15 +976,32 @@ def _run_scheduled():
 
     def job_x_intel():
         """Every 4h (06,10,14,18,22): X Intel research briefing via Grok + Haiku."""
-        log.info("Running X INTEL briefing")
+        log.info("Running INTEL BRIEFING (YouTube+SunFlow+Haiku)")
         try:
             from x_intel_v4 import run_x_intel_batch
             result = run_x_intel_batch(send_to_telegram=True)
-            log.info("X INTEL: %s (%d raw chars, %d summary words)",
+            log.info("INTEL: %s (%d raw chars, %d summary words)",
                      result.get("status"), result.get("raw_chars", 0),
                      result.get("summary_words", 0))
         except Exception as e:
             log.error("X INTEL briefing failed: %s", e)
+
+    def job_youtube_health():
+        """Every 4h: YouTube health check report to Telegram."""
+        try:
+            from youtube_health import send_health_report
+            send_health_report()
+        except Exception as e:
+            log.error("YouTube health check failed: %s", e)
+
+    def job_youtube_watchdog():
+        """Every 4h (independent of scan): check if YouTube pipeline is alive."""
+        try:
+            from youtube_watchdog import run_watchdog
+            status = run_watchdog(send_alert=True)
+            log.info("YouTube watchdog: %s", status.get("heartbeat", "?"))
+        except Exception as e:
+            log.error("YouTube watchdog failed: %s", e)
 
     def job_youtube_scan():
         """Every 2h: scan all channels for new videos, analyse, store in DB.
@@ -832,7 +1009,7 @@ def _run_scheduled():
         log.info("Running YouTube auto-scan")
         try:
             from social.youtube_free import run_youtube_scan
-            result = run_youtube_scan(send_alerts=False)
+            result = run_youtube_scan(send_alerts=True)
             if result:
                 log.info("YouTube scan: %d new videos processed", result.get("new_videos", 0))
         except Exception as e:
@@ -918,6 +1095,17 @@ def _run_scheduled():
     schedule.every().day.at("18:00").do(job_x_intel)
     schedule.every().day.at("22:00").do(job_x_intel)
 
+    # YouTube watchdog (independent of scan, fixed 4h marks)
+    schedule.every().day.at("07:00").do(job_youtube_watchdog)
+    schedule.every().day.at("11:00").do(job_youtube_watchdog)
+    schedule.every().day.at("15:00").do(job_youtube_watchdog)
+    schedule.every().day.at("19:00").do(job_youtube_watchdog)
+
+    # YouTube health check (same times as X Intel)
+    schedule.every().day.at("06:00").do(job_youtube_health)
+    schedule.every().day.at("14:00").do(job_youtube_health)
+    schedule.every().day.at("22:00").do(job_youtube_health)
+
     # Evening Review: 20:00 UTC
     schedule.every().day.at("20:00").do(job_evening_review)
 
@@ -973,7 +1161,7 @@ def main():
         log.error("TELEGRAM_BOT_TOKEN not set")
         return
 
-    log.info("Starting Fiery Eyes v5.2 bot...")
+    log.info("Starting Fiery Eyes v6.0 bot...")
 
     # Start SunFlow Telegram listener in background thread
     def _run_sunflow():
@@ -1024,12 +1212,14 @@ def main():
     app.add_handler(CommandHandler("convergence", cmd_convergence))
     app.add_handler(CommandHandler("menu", cmd_menu))
     app.add_handler(CommandHandler("help", cmd_help))
+    app.add_handler(CommandHandler("notebook", cmd_notebook))
+    app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("start", cmd_help))
 
     # Callback and menu handlers
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(
-        filters.TEXT & filters.Regex(r'^(📊 Intel|🐋 Signals|💼 Portfolio|📈 Market|🔧 Tools)$'),
+        filters.TEXT & filters.Regex(r'^(📊 Intel|🐋 Signals|🔥 Fiery Eyes|💼 Portfolio|⚙️ System)$'),
         handle_menu_text))
 
     async def post_init(application):

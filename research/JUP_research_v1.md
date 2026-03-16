@@ -522,7 +522,7 @@ Next deep review: 22 March 2026 (Sunday weekly cycle)
 ## TELEGRAM SUMMARY CARD
 
 ```
-━━━ JUP — 78/100 ━━━
+=== JUP — 78/100 ===
 $0.16 | ATH $2.00 (-92%)
 Thesis: Solana's DeFi Superapp. 95% of swaps.
 Protocol at ATH. Token at ATL. Insane disconnect.

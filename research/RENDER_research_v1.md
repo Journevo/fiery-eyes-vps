@@ -456,7 +456,7 @@ Next deep review: 22 March 2026 (Sunday weekly cycle)
 ## TELEGRAM SUMMARY CARD
 
 ```
-━━━ RENDER — 72/100 ━━━
+=== RENDER — 72/100 ===
 $1.87 | ATH $13.53 (-86%)
 Thesis: Decentralised GPU cloud for AI/3D.
 68M frames rendered. 5,600 nodes. Real usage.

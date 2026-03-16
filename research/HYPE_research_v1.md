@@ -477,7 +477,7 @@ Next deep review: 22 March 2026 (Sunday weekly cycle)
 ## TELEGRAM SUMMARY CARD
 
 ```
-━━━ HYPE — 79/100 ━━━
+=== HYPE — 79/100 ===
 $37.90 | ATH $59.30 (-36%)
 Thesis: On-chain Binance. 97% fee buyback.
 $650M annualised revenue. P/E = 14x.

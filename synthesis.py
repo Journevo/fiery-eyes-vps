@@ -18,7 +18,7 @@ log = get_logger("synthesis")
 
 # Persistent keyboard for Telegram messages
 _KEYBOARD_JSON = {
-    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "keyboard": [["📊 Intel", "🐋 Signals", "🔥 Fiery Eyes"], ["💼 Portfolio", "⚙️ System"]],
     "resize_keyboard": True,
     "is_persistent": True,
 }
@@ -112,7 +112,7 @@ def collect_all_layers() -> dict:
             "watchlist_mentions": [
                 {"symbol": w["symbol"], "mentions": w["total_mentions"],
                  "bullish": w["bullish"], "bearish": w["bearish"],
-                 "conviction": w["weighted_conviction"],
+                 "conviction": w.get("weighted_conviction") or 0,
                  "channels": w["channels"][:3]}
                 for w in yt.get("watchlist_mentions", [])
             ],

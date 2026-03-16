@@ -442,7 +442,7 @@ Next deep review: 22 March 2026 (Sunday weekly cycle)
 ## TELEGRAM SUMMARY CARD
 
 ```
-━━━ BTC — 90/100 ━━━
+=== BTC — 90/100 ===
 $70,800 | ATH $126K (-44%)
 Thesis: Digital gold. Everything follows BTC.
 Bear 42% complete. Missing BTC = biggest risk.

@@ -51,7 +51,7 @@ def get_summary_card(token: str) -> str:
         if match:
             card = match.group(1).strip()
             # Only use it if it looks like a summary card (has the token name)
-            if token in card or '━━━' in card:
+            if token in card or '━━━' in card or '===' in card:
                 return card
 
     # Fallback: generate from index
@@ -63,7 +63,7 @@ def get_summary_card(token: str) -> str:
     price = "$%s" % info['price'] if info.get('price') else "TBD"
 
     return (
-        "\u2501\u2501\u2501 %s \u2014 %s/100 \u2501\u2501\u2501\n"
+        "=== %s - %s/100 ===\n"
         "%s | %s\n"
         "Recommendation: %s\n"
         "Bear: %s | Base: %s | Bull: %s\n"
@@ -122,7 +122,7 @@ def get_scorecard() -> str:
         reverse=True
     )
 
-    lines = ["\u2501\u2501\u2501 THE HEADBAND: WATCHLIST \u2501\u2501\u2501\n"]
+    lines = ["=== THE HEADBAND: WATCHLIST ===\n"]
     lines.append(" # | Token    | Score | Rating       | Rec")
     lines.append("---|----------|-------|--------------|-------------")
 

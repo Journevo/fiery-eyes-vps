@@ -19,7 +19,7 @@ log = get_logger("youtube_intel")
 
 # Persistent keyboard for Telegram messages
 _KEYBOARD_JSON = {
-    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "keyboard": [["📊 Intel", "🐋 Signals", "🔥 Fiery Eyes"], ["💼 Portfolio", "⚙️ System"]],
     "resize_keyboard": True,
     "is_persistent": True,
 }
@@ -96,7 +96,7 @@ def get_recent_youtube_intel(hours: int = 48) -> dict:
                 "channel": channel,
                 "sentiment": sentiment,
                 "conviction": conviction,
-                "weighted_conviction": conviction * channel_weight,
+                "weighted_conviction": (conviction or 0) * channel_weight,
                 "price_target": price_target,
                 "video_title": title,
                 "video_id": video_id,
@@ -113,12 +113,12 @@ def get_recent_youtube_intel(hours: int = 48) -> dict:
 
         # Calculate aggregate metrics
         total_mentions = len(mentions)
-        bullish = sum(1 for m in mentions if m["sentiment"] == "bullish")
-        bearish = sum(1 for m in mentions if m["sentiment"] == "bearish")
-        avg_conviction = sum(m["conviction"] for m in mentions) / total_mentions if total_mentions else 0
-        weighted_avg = sum(m["weighted_conviction"] for m in mentions) / sum(m["channel_weight"] for m in mentions) if mentions else 0
-        price_targets = [m["price_target"] for m in mentions if m["price_target"]]
-        unique_channels = list(set(m["channel"] for m in mentions))
+        bullish = sum(1 for m in mentions if m.get("sentiment", "neutral") == "bullish")
+        bearish = sum(1 for m in mentions if m.get("sentiment", "neutral") == "bearish")
+        avg_conviction = sum((m.get("conviction") or 0) for m in mentions) / total_mentions if total_mentions else 0
+        weighted_avg = sum((m.get("weighted_conviction") or 0) for m in mentions) / sum((m.get("channel_weight") or 1) for m in mentions) if mentions else 0
+        price_targets = [m.get("price_target") for m in mentions if m.get("price_target")]
+        unique_channels = list(set(m.get("channel", "?") for m in mentions))
 
         watchlist_mentions.append({
             "symbol": symbol,
@@ -130,18 +130,18 @@ def get_recent_youtube_intel(hours: int = 48) -> dict:
             "weighted_conviction": round(weighted_avg, 1),
             "price_targets": price_targets,
             "channels": unique_channels,
-            "top_mentions": sorted(mentions, key=lambda m: m["weighted_conviction"], reverse=True)[:3],
+            "top_mentions": sorted(mentions, key=lambda m: (m.get("weighted_conviction") or 0), reverse=True)[:3],
         })
 
     # Sort by weighted conviction
-    watchlist_mentions.sort(key=lambda x: x["weighted_conviction"], reverse=True)
+    watchlist_mentions.sort(key=lambda x: (x.get("weighted_conviction") or 0), reverse=True)
 
     # Detect convergence: 2+ channels bullish on same token in 24h
     convergence = []
     for wm in watchlist_mentions:
         recent_bullish = [m for m in token_mentions.get(wm["symbol"], [])
-                         if m["sentiment"] == "bullish" and m["hours_ago"] <= 24]
-        unique_bullish_channels = set(m["channel"] for m in recent_bullish)
+                         if m.get("sentiment", "neutral") == "bullish" and m.get("hours_ago", 999) <= 24]
+        unique_bullish_channels = set(m.get("channel", "?") for m in recent_bullish)
         if len(unique_bullish_channels) >= 2:
             convergence.append({
                 "symbol": wm["symbol"],
@@ -195,7 +195,7 @@ def format_youtube_telegram(intel: dict) -> str:
     lines = [f"📺 <b>YOUTUBE INTEL</b> ({intel['videos']} videos / 48h)", ""]
 
     # Only show tokens with conviction >= threshold
-    high_conviction = [w for w in watchlist if w["weighted_conviction"] >= MIN_CONVICTION_REPORT]
+    high_conviction = [w for w in watchlist if (w.get("weighted_conviction") or 0) >= MIN_CONVICTION_REPORT]
     if not high_conviction:
         # Show top 3 even if below threshold
         high_conviction = watchlist[:3]
@@ -215,7 +215,7 @@ def format_youtube_telegram(intel: dict) -> str:
 
         lines.append(
             f"<b>${wm['symbol']}</b>: {wm['total_mentions']} mentions ({sentiment_bar}) "
-            f"conv: {wm['weighted_conviction']:.0f}/10{targets_str}\n"
+            f"conv: {(wm.get('weighted_conviction') or 0):.0f}/10{targets_str}\n"
             f"  📢 {channels_str}"
         )
 

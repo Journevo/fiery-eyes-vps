@@ -24,7 +24,26 @@
       "Bash(find /opt/fiery-eyes/health_score /opt/fiery-eyes/kol_tracking /opt/fiery-eyes/telegram_alpha /opt/fiery-eyes/shadow /opt/fiery-eyes/telegram_bot/severity.py /opt/fiery-eyes/telegram_bot/huoyan_pulse.py /opt/fiery-eyes/telegram_bot/override_commands.py /opt/fiery-eyes/monitoring/data_health.py -name \"*.py\" 2>/dev/null | sort)",
       "Bash(/opt/fiery-eyes/venv/bin/pip install telethon 2>&1)",
       "Bash(git status -u)",
-      "Bash(git init && git add -A && git status)"
+      "Bash(git init && git add -A && git status)",
+      "Bash(git commit -m \"$\\(cat <<'EOF'\nAdd Fiery Eyes v2: Health Score engine, KOL tracking, Telegram alpha parsing, shadow trading, and execution pipeline\n\nUpgrades the intelligence/scoring system to a full degen meme execution system \\(Jingubang H\\).\nExisting Quality Gate, 3 scoring engines, regime multiplier, telegram alerts, and nightly reports\nare preserved. New layer adds: Health Score v2 with 5-signal scoring and data confidence,\nKOL wallet monitoring via Helius, Krypto King Telegram parser via Telethon, phased entry\npipeline with 4 entry doors, shadow trading with phantom PnL tracking, 4-tier alert severity\nwith multi-channel routing, Huoyan 4-hourly pulse, moonbag reaper, and graceful degradation.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git config user.name \"Jingubang\" && git config user.email \"jingubang@fiery-eyes.dev\")",
+      "Bash(/opt/fiery-eyes/venv/bin/python -c \"\nfrom kol_tracking.monitor import check_kol_wallets\ncheck_kol_wallets\\(\\)\nprint\\('Done'\\)\n\" 2>&1 | head -30)",
+      "Bash(sudo -u postgres psql -d fiery_eyes -c \"SELECT kw.name, kt.token_symbol, kt.action, kt.detected_at::date FROM kol_transactions kt JOIN kol_wallets kw ON kw.id = kt.kol_wallet_id ORDER BY kt.detected_at DESC LIMIT 10;\")",
+      "Bash(pgrep -f \"main_v2.py\" | xargs kill 2>/dev/null; sleep 1; echo \"Old processes cleared\")",
+      "Bash(/opt/fiery-eyes/venv/bin/python main_v2.py 2>&1)",
+      "Bash(git add kol_tracking/monitor.py monitoring/degraded.py && git commit -m \"$\\(cat <<'EOF'\nFix KOL exit alert dedup, conviction filter $0 rejection, and degraded mode threshold\n\nBug 1: Deduplicate exit alerts — skip if already sent for same wallet+token\nin last 5 minutes. Exit percentage already correctly sums across all txs.\nBug 2: Conviction filter now explicitly rejects amount_usd == 0 or None.\nBug 3: Degraded mode requires 3 consecutive failures from same source within\n10 minutes instead of triggering on single transient 429s.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git status)",
+      "Bash(sudo -u postgres psql -d fiery_eyes -c \"SELECT symbol, token_tier, last_health_score::numeric\\(5,1\\) as health, last_health_confidence::numeric\\(5,1\\) as conf, health_state, monitoring_interval_min as interval_min FROM tokens WHERE last_health_score IS NOT NULL ORDER BY last_health_score DESC LIMIT 30;\")",
+      "Bash(sudo -u postgres psql -d fiery_eyes -c \"SELECT token_tier, COUNT\\(*\\) as count, ROUND\\(AVG\\(last_health_score\\)::numeric, 1\\) as avg_health FROM tokens WHERE token_tier IS NOT NULL GROUP BY token_tier ORDER BY avg_health DESC;\")",
+      "Bash(sudo -u postgres psql -d fiery_eyes -c \"SELECT health_state, COUNT\\(*\\) as count FROM tokens WHERE health_state IS NOT NULL GROUP BY health_state ORDER BY count DESC;\")",
+      "Bash(sudo -u postgres psql -d fiery_eyes -c \"SELECT COUNT\\(*\\) as total, COUNT\\(*\\) FILTER \\(WHERE action='buy'\\) as buys, COUNT\\(*\\) FILTER \\(WHERE action='sell'\\) as sells, COUNT\\(*\\) FILTER \\(WHERE is_conviction_buy=true\\) as conviction_buys, COUNT\\(*\\) FILTER \\(WHERE amount_usd > 1\\) as with_usd, COUNT\\(*\\) FILTER \\(WHERE amount_usd = 0\\) as zero_usd, ROUND\\(SUM\\(amount_usd\\)::numeric, 2\\) as total_usd FROM kol_transactions;\")",
+      "Bash(sudo -u postgres psql -d fiery_eyes -c \"SELECT COUNT\\(*\\) as total_scores, COUNT\\(DISTINCT token_address\\) as unique_tokens, ROUND\\(AVG\\(scaled_score\\)::numeric, 1\\) as avg_score, ROUND\\(MIN\\(scaled_score\\)::numeric, 1\\) as min, ROUND\\(MAX\\(scaled_score\\)::numeric, 1\\) as max, ROUND\\(AVG\\(confidence_pct\\)::numeric, 1\\) as avg_conf FROM health_scores;\")",
+      "Bash(sudo -u postgres psql -d fiery_eyes -c \"SELECT kt.token_symbol, COUNT\\(*\\) as txns, COUNT\\(*\\) FILTER \\(WHERE kt.action='buy'\\) as buys, COUNT\\(*\\) FILTER \\(WHERE kt.action='sell'\\) as sells, ROUND\\(SUM\\(kt.amount_usd\\)::numeric, 2\\) as total_usd, MAX\\(kt.detected_at\\)::timestamp\\(0\\) as last_seen FROM kol_transactions kt WHERE kt.amount_usd > 1 GROUP BY kt.token_symbol ORDER BY last_seen DESC LIMIT 10;\")",
+      "Bash(git push origin main)",
+      "Bash(git checkout master)",
+      "Bash(grep -r \"twitter\\\\|twilio\\\\|grok\" /opt/fiery-eyes --include=\"*.py\" --include=\"*.json\" 2>/dev/null | head -20)",
+      "Bash(find /opt/fiery-eyes -name \"*.sql\" -exec cat {} \\\\;)",
+      "Bash(find /opt/fiery-eyes -name \"*.py\" -type f -exec grep -l \"wallet.*quality\\\\|wallet.*type\\\\|wallet.*class\" {} \\\\; | head -15)",
+      "Bash(curl -s \"https://api.llama.fi/v2/chains\" | python3 -c \"\nimport sys, json\ndata = json.load\\(sys.stdin\\)\nfor chain in data:\n    if chain.get\\('name',''\\).lower\\(\\) in \\('solana', 'ethereum', 'base', 'sui'\\):\n        print\\(f\\\\\"{chain['name']}: TVL=\\\\${chain.get\\('tvl',0\\)/1e9:.2f}B, keys={list\\(chain.keys\\(\\)\\)}\\\\\"\\)\n\" 2>&1)"
     ]
   }
 }

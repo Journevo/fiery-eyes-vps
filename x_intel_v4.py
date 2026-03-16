@@ -35,7 +35,7 @@ RESEARCH_QUERIES = [
 ]
 
 _KEYBOARD_JSON = {
-    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "keyboard": [["📊 Intel", "🐋 Signals", "🔥 Fiery Eyes"], ["💼 Portfolio", "⚙️ System"]],
     "resize_keyboard": True,
     "is_persistent": True,
 }
@@ -501,7 +501,7 @@ def run_x_intel_batch(send_to_telegram: bool = True) -> dict:
 
     # 5. Format message
     now = datetime.now(timezone.utc).strftime("%H:%M UTC")
-    parts = ["\U0001f4e1 <b>X INTEL \u2014 %s</b>\n\n%s" % (now, briefing)]
+    parts = ["\U0001f4e1 <b>INTEL BRIEFING \u2014 %s</b>\n\n%s" % (now, briefing)]
 
     if action_summaries:
         parts.append("\n\n\u2501\u2501\u2501 <b>SYSTEM ACTIONS</b> \u2501\u2501\u2501")

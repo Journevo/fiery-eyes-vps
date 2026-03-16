@@ -14,7 +14,7 @@ log = get_logger("liquidity")
 
 # Persistent keyboard for Telegram messages
 _KEYBOARD_JSON = {
-    "keyboard": [["📊 Intel", "🐋 Signals", "💼 Portfolio", "📈 Market", "🔧 Tools"]],
+    "keyboard": [["📊 Intel", "🐋 Signals", "🔥 Fiery Eyes"], ["💼 Portfolio", "⚙️ System"]],
     "resize_keyboard": True,
     "is_persistent": True,
 }

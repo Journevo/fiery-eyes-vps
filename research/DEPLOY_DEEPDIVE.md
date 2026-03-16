@@ -79,7 +79,7 @@ def get_summary_card(token: str) -> str:
             filepath = RESEARCH_DIR / fname
             content = filepath.read_text()
             # Find the telegram summary card code block
-            match = re.search(r'```\n(━━━.*?)```', content, re.DOTALL)
+            match = re.search(r'```\n(===.*?)```', content, re.DOTALL)
             if match:
                 return match.group(1).strip()
     
@@ -92,7 +92,7 @@ def get_summary_card(token: str) -> str:
     price = f"${info['price']}" if info.get('price') else "TBD"
     
     return (
-        f"━━━ {token} — {info.get('score', 'TBD')}/100 ━━━\n"
+        f"=== {token} — {info.get('score', 'TBD')}/100 ===\n"
         f"{price} | {info['rating']}\n"
         f"Recommendation: {info['recommendation']}\n"
         f"Bear: {info.get('bear', 'TBD')} | Base: {info.get('base', 'TBD')} | Bull: {info.get('bull', 'TBD')}\n"
@@ -154,7 +154,7 @@ def get_scorecard() -> str:
         reverse=True
     )
     
-    lines = ["━━━ THE HEADBAND: WATCHLIST ━━━\n"]
+    lines = ["=== THE HEADBAND: WATCHLIST ===\n"]
     lines.append(" # │ Token    │ Score │ Rating       │ EV")
     lines.append("───┼──────────┼───────┼──────────────┼────────")
     
@@ -190,7 +190,7 @@ async def handle_deepdive(update, context):
     
     if not args:
         await update.message.reply_text(
-            "━━━ THE HEADBAND ━━━\n\n"
+            "=== THE HEADBAND ===\n\n"
             "Usage:\n"
             "/deepdive all — Scorecard\n"
             "/deepdive BTC — Summary card\n"
@@ -240,7 +240,7 @@ systemctl restart fiery-eyes-v5.service
 In daily_report.py, add after the existing sections:
 
 ```python
-# ━━━ DEEP DIVE ALERTS ━━━
+# === DEEP DIVE ALERTS ===
 try:
     from research.research_manager import load_index
     from watchlist import fetch_prices

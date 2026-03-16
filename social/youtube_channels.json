@@ -1,54 +1,254 @@
 {
   "channels": [
-    {"name": "All-In Podcast", "channel_id": "UCESLZhusAkFfsNwxyfb0Qow", "priority": "high"},
-    {"name": "Lex Fridman", "channel_id": "UCSHZKyawb77ixDdsGog4iWA", "priority": "high"},
-    {"name": "Principles by Ray Dalio", "channel_id": "UCnhTCZp_jbcjzriXiTi1uog", "priority": "high"},
-    {"name": "Real Vision Finance", "channel_id": "UCBH5VZE_Y4F3CMa4LYMFBuQ", "priority": "high"},
-    {"name": "Raoul Pal", "channel_id": "UCvSfL0HRf4kkjCV0GfnxGoA", "priority": "high"},
-    {"name": "Impact Theory", "channel_id": "UCnYMOamNKLGVlJgRUbamveA", "priority": "high"},
-    {"name": "PowerfulJRE", "channel_id": "UCzQUP1qoWDoEbmsQxvdjxgQ", "priority": "high"},
-    {"name": "The Diary Of A CEO", "channel_id": "UCGq-a57w-aPwyi3pIPAKtIg", "priority": "high"},
-    {"name": "InvestAnswers", "channel_id": "UCH6KS5IiLfTyunTBPbhq08Q", "priority": "high"},
-    {"name": "Benjamin Cowen", "channel_id": "UCRvqjQPSeaWn-uEx6X9HPbQ", "priority": "high"},
-    {"name": "Coin Bureau", "channel_id": "UCTULWwXF7dj19_OgQFcodJg", "priority": "high"},
-    {"name": "Bankless", "channel_id": "UCAl9Ld79qaZxp-Ij9Sv0HzA", "priority": "high"},
-    {"name": "Crypto Banter", "channel_id": "UCybasP-2D2b5kTYDGv7aDDQ", "priority": "high"},
-    {"name": "VirtualBacon", "channel_id": "UCcrEA_xd9Ldf1CEfR3aCihg", "priority": "high"},
-    {"name": "Mark Moss", "channel_id": "UCdb3vYKZ60hZM5WZoDBexHg", "priority": "high"},
-    {"name": "ColinTalksCrypto", "channel_id": "UCnqJ2HjWhm7MbhAQ_6y-Yw", "priority": "high"},
-    {"name": "Krypto King", "channel_id": "UC8fMhRrZVk3P8MnkB3k8z_w", "priority": "high"},
-    {"name": "Chart Fanatics", "channel_id": "UCfCWGEbMhOCrMhzHwsMFvYQ", "priority": "high"},
-    {"name": "Crypto Insider", "channel_id": "UCSbyF4RwCk3AuGVayWRfZ2A", "priority": "high"},
-    {"name": "Jack Neel", "channel_id": "UCwCFh1rnKiB37T2mdYL5maQ", "priority": "high"},
-    {"name": "Titans of Tomorrow", "channel_id": "UCIkZL3iqHhVCGph5qN2HfWg", "priority": "high"},
-    {"name": "Lark Davis", "channel_id": "UCl2oCaw8hdR_kbqyqFiYJIA", "priority": "medium"},
-    {"name": "Wolf of All Streets", "channel_id": "UCrmPHrz-TjMmQy_desMoDSA", "priority": "medium"},
-    {"name": "Crypto Crew University", "channel_id": "UC7ndkZ4vViKiM7jSzVgDlKA", "priority": "medium"},
-    {"name": "Lyn Alden", "channel_id": "UCuMLAc_L1cDRwln3C6nN3RA", "priority": "medium"},
-    {"name": "PBD Podcast", "channel_id": "UCGX7nGXpz-CmO_Arg-cgJ7A", "priority": "medium"},
-    {"name": "Altcoin Daily", "channel_id": "UC7KjtEJT6HvI3kBMhVkMbkQ", "priority": "medium"},
-    {"name": "The Breakdown", "channel_id": "UCaS5RsmbQ_2gaPE1RiuMbLg", "priority": "medium"},
-    {"name": "DataDash", "channel_id": "UCCatR7nWbYrkVXdxXb4cGXg", "priority": "medium"},
-    {"name": "Anthony Pompliano", "channel_id": "UCevXpeL8cJeqb4SE2B4kDKQ", "priority": "medium"},
-    {"name": "Ivan on Tech", "channel_id": "UCrYmtJBtLdtm2ov84ulV-yg", "priority": "medium"},
-    {"name": "Miles Deutscher", "channel_id": "UCVVX-7tHff75fRPxAjl_ZnA", "priority": "medium"},
-    {"name": "CryptoCon", "channel_id": "UCjMKmM_22t3JnQMIbkMjwhw", "priority": "medium"},
-    {"name": "Patrick Boyle", "channel_id": "UCASM0cgfkJxQ1ICmRilfHLQ", "priority": "medium"},
-    {"name": "Paul Barron Network", "channel_id": "UC4VPa7EOvObpyCPMz2VEQfA", "priority": "medium"},
-    {"name": "CryptosRUs", "channel_id": "UCuRiArGj1GGkmfqtm9Bqvvg", "priority": "medium"},
-    {"name": "Gareth Soloway", "channel_id": "UCZ-J2m1AUSLnifxJDlAhhwg", "priority": "medium"},
-    {"name": "The Bitcoin Layer", "channel_id": "UCx60MVpRSMsyGqVYhDsuDPw", "priority": "medium"},
-    {"name": "PlanB", "channel_id": "UCwrevyDwc6SFEo0gxQKD2dQ", "priority": "medium"},
-    {"name": "Natalie Brunell", "channel_id": "UC4oheWvOxJoaH2N90GUwleA", "priority": "medium"},
-    {"name": "Digital Asset News", "channel_id": "UC2FwDvHBBSkhQ2DoaOuoaWQ", "priority": "medium"},
-    {"name": "CTO Larsson", "channel_id": "UCFU-BE5HRJoudqGqh3d1VMA", "priority": "medium"},
-    {"name": "Kitco NEWS", "channel_id": "UC9ijza42jVR3T69GJkv7z6A", "priority": "medium"},
-    {"name": "Rekt Capital", "channel_id": "UCffNwA5OkxWEmrOLkMqRHjw", "priority": "medium"},
-    {"name": "Bob Loukas", "channel_id": "UC0zGwzu0zzCImC1BvJKmUGA", "priority": "medium"},
-    {"name": "Bitcoin Magazine", "channel_id": "UCni7PAlyNS0_12H-26DJJ3w", "priority": "medium"},
-    {"name": "Heresy Financial", "channel_id": "UCJza_J4BW32HNKUr-F8uKzA", "priority": "medium"},
-    {"name": "British HODL", "channel_id": "UCBGncGsI7pIDP6D1zqDCjew", "priority": "medium"},
-    {"name": "Samuel Leeds", "channel_id": "UCm-4xGdh0r7MrMDz1DQEJAQ", "priority": "medium"},
-    {"name": "Jamie York", "channel_id": "UC0XjjT8e2Cg1woOKOlIHKRg", "priority": "medium"}
+    {
+      "name": "All-In Podcast",
+      "channel_id": "UCESLZhusAkFfsNwxyfb0Qow",
+      "priority": "high"
+    },
+    {
+      "name": "Lex Fridman",
+      "channel_id": "UCSHZKyawb77ixDdsGog4iWA",
+      "priority": "high"
+    },
+    {
+      "name": "Principles by Ray Dalio",
+      "channel_id": "UCnhTCZp_jbcjzriXiTi1uog",
+      "priority": "high"
+    },
+    {
+      "name": "Real Vision Finance",
+      "channel_id": "UCGXWKlq1Oxr3ddEtmKhAkPg",
+      "priority": "high"
+    },
+    {
+      "name": "Raoul Pal",
+      "channel_id": "UCvSfL0HRf4kkjCV0GfnxGoA",
+      "priority": "high"
+    },
+    {
+      "name": "Impact Theory",
+      "channel_id": "UCnYMOamNKLGVlJgRUbamveA",
+      "priority": "high"
+    },
+    {
+      "name": "PowerfulJRE",
+      "channel_id": "UCzQUP1qoWDoEbmsQxvdjxgQ",
+      "priority": "high"
+    },
+    {
+      "name": "The Diary Of A CEO",
+      "channel_id": "UCGq-a57w-aPwyi3pIPAKtIg",
+      "priority": "high"
+    },
+    {
+      "name": "InvestAnswers",
+      "channel_id": "UCH6KS5IiLfTyunVHPCDYT8Q",
+      "priority": "high"
+    },
+    {
+      "name": "Benjamin Cowen",
+      "channel_id": "UCRvqjQPSeaWn-uEx6X9HPbQ",
+      "priority": "high"
+    },
+    {
+      "name": "Coin Bureau",
+      "channel_id": "UCTULWwXF7dj19_OgQFcodJg",
+      "priority": "high"
+    },
+    {
+      "name": "Bankless",
+      "channel_id": "UCAl9Ld79qaZxp-Ij9Sv0HzA",
+      "priority": "high"
+    },
+    {
+      "name": "Crypto Banter",
+      "channel_id": "UCybasP-2D2b5kTYDGv7aDDQ",
+      "priority": "high"
+    },
+    {
+      "name": "VirtualBacon",
+      "channel_id": "UCcrEA_xd9Ldf1C8DIJYdyyA",
+      "priority": "high"
+    },
+    {
+      "name": "Mark Moss",
+      "channel_id": "UCdb3vYKZ60hZM5FtC-WlYPA",
+      "priority": "high"
+    },
+    {
+      "name": "ColinTalksCrypto",
+      "channel_id": "UCnqJ2HjWhm7MbhgFHLUENfQ",
+      "priority": "high"
+    },
+    {
+      "name": "Krypto King",
+      "channel_id": "UC6DkKXrHSEf5zTNGhEZdOJA",
+      "priority": "high"
+    },
+    {
+      "name": "Chart Fanatics",
+      "channel_id": "UC2GyeAMRDA4cRIiISejML2g",
+      "priority": "high"
+    },
+    {
+      "name": "Crypto Insider",
+      "channel_id": "UCSbyF4RwCk3AuGhYmykCGOQ",
+      "priority": "high"
+    },
+    {
+      "name": "Jack Neel",
+      "channel_id": "UCFRCiFkWWJN2rO6dsKU9-1A",
+      "priority": "high"
+    },
+    {
+      "name": "Titans of Tomorrow",
+      "channel_id": "UCCJT5NPcIw78xNYTqjh4jJA",
+      "priority": "high"
+    },
+    {
+      "name": "Lark Davis",
+      "channel_id": "UCl2oCaw8hdR_kbqyqFiYJIA",
+      "priority": "medium"
+    },
+    {
+      "name": "Wolf of All Streets",
+      "channel_id": "UCrmPHrz-TjMmQy_desMoDSA",
+      "priority": "medium"
+    },
+    {
+      "name": "Crypto Crew University",
+      "channel_id": "UC7ndkZ4vViKiM7jSzVgDlKA",
+      "priority": "medium"
+    },
+    {
+      "name": "Lyn Alden",
+      "channel_id": "UCuMLAc_L1cDRwln3C6nN3RA",
+      "priority": "medium"
+    },
+    {
+      "name": "PBD Podcast",
+      "channel_id": "UCGX7nGXpz-CmO_Arg-cgJ7A",
+      "priority": "medium"
+    },
+    {
+      "name": "Altcoin Daily",
+      "channel_id": "UC7KjtEJT6HvI3kBMhVkMbkQ",
+      "priority": "medium"
+    },
+    {
+      "name": "The Breakdown",
+      "channel_id": "UCaS5RsmbQ_2gaPE1RiuMbLg",
+      "priority": "medium"
+    },
+    {
+      "name": "DataDash",
+      "channel_id": "UCCatR7nWbYrkVXdxXb4cGXg",
+      "priority": "medium"
+    },
+    {
+      "name": "Anthony Pompliano",
+      "channel_id": "UCevXpeL8cJeqb4SE2B4kDKQ",
+      "priority": "medium"
+    },
+    {
+      "name": "Ivan on Tech",
+      "channel_id": "UCrYmtJBtLdtm2ov84ulV-yg",
+      "priority": "medium"
+    },
+    {
+      "name": "Miles Deutscher",
+      "channel_id": "UCVVX-7tHff75fRPxAjl_ZnA",
+      "priority": "medium"
+    },
+    {
+      "name": "CryptoCon",
+      "channel_id": "UCjMKmM_22t3JnQMIbkMjwhw",
+      "priority": "medium"
+    },
+    {
+      "name": "Patrick Boyle",
+      "channel_id": "UCASM0cgfkJxQ1ICmRilfHLQ",
+      "priority": "medium"
+    },
+    {
+      "name": "Paul Barron Network",
+      "channel_id": "UC4VPa7EOvObpyCPMz2VEQfA",
+      "priority": "medium"
+    },
+    {
+      "name": "CryptosRUs",
+      "channel_id": "UCuRiArGj1GGkmfqtm9Bqvvg",
+      "priority": "medium"
+    },
+    {
+      "name": "Gareth Soloway",
+      "channel_id": "UCZ-J2m1AUSLnifxJDlAhhwg",
+      "priority": "medium"
+    },
+    {
+      "name": "The Bitcoin Layer",
+      "channel_id": "UCx60MVpRSMsyGqVYhDsuDPw",
+      "priority": "medium"
+    },
+    {
+      "name": "PlanB",
+      "channel_id": "UCwrevyDwc6SFEo0gxQKD2dQ",
+      "priority": "medium"
+    },
+    {
+      "name": "Natalie Brunell",
+      "channel_id": "UC4oheWvOxJoaH2N90GUwleA",
+      "priority": "medium"
+    },
+    {
+      "name": "Digital Asset News",
+      "channel_id": "UC2FwDvHBBSkhQ2DoaOuoaWQ",
+      "priority": "medium"
+    },
+    {
+      "name": "CTO Larsson",
+      "channel_id": "UCFU-BE5HRJoudqGqh3d1VMA",
+      "priority": "medium"
+    },
+    {
+      "name": "Kitco NEWS",
+      "channel_id": "UC9ijza42jVR3T69GJkv7z6A",
+      "priority": "medium"
+    },
+    {
+      "name": "Rekt Capital",
+      "channel_id": "UCffNwA5OkxWEmrOLkMqRHjw",
+      "priority": "medium"
+    },
+    {
+      "name": "Bob Loukas",
+      "channel_id": "UC0zGwzu0zzCImC1BvJKmUGA",
+      "priority": "medium"
+    },
+    {
+      "name": "Bitcoin Magazine",
+      "channel_id": "UCni7PAlyNS0_12H-26DJJ3w",
+      "priority": "medium"
+    },
+    {
+      "name": "Heresy Financial",
+      "channel_id": "UCJza_J4BW32HNKUr-F8uKzA",
+      "priority": "medium"
+    },
+    {
+      "name": "British HODL",
+      "channel_id": "UCBGncGsI7pIDP6D1zqDCjew",
+      "priority": "medium"
+    },
+    {
+      "name": "Samuel Leeds",
+      "channel_id": "UCm-4xGdh0r7MrMDz1DQEJAQ",
+      "priority": "medium"
+    },
+    {
+      "name": "Jamie York",
+      "channel_id": "UC0XjjT8e2Cg1woOKOlIHKRg",
+      "priority": "medium"
+    }
   ]
 }

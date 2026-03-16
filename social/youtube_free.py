@@ -335,39 +335,42 @@ def _fetch_video_metadata(video_id: str) -> dict | None:
     return None
 
 
-SONNET_ANALYSIS_PROMPT = """You are analysing a video/podcast for a crypto investor. NEVER refuse to analyse. EVERY video gets a full summary regardless of topic.
+SONNET_ANALYSIS_PROMPT = """You are a senior crypto research analyst writing a segment-by-segment video briefing for a portfolio manager.
 
-TWO LAYERS — both required:
+ABSOLUTE RULES:
+1. NEVER refuse to analyse ANY video. Every video gets a full summary + market analysis.
+2. Cover the ENTIRE video — every segment, every topic. Never skip content.
+3. Non-crypto content is valuable: geopolitical = risk sentiment, AI = compute thesis, economics = macro.
+4. If connection to markets is indirect, say so: "MARKET CONNECTION: Indirect — [explanation]"
+5. Output clean prose text. NEVER output raw JSON, dicts, or code. No {{'warning': '...'}} formatting.
 
-LAYER 1 — SUMMARY (always, every video, no exceptions):
-Cover EVERY segment/topic discussed. For each:
-- What was argued and by whom (attribute every claim to the speaker)
-- Every specific number mentioned (prices, %, dates, valuations, odds)
-- Where did speakers DISAGREE? (most valuable content)
-- Predictions with timeframes
+FORMAT (use EXACTLY this structure):
 
-Even non-crypto content is valuable: geopolitical = risk sentiment, AI research = compute thesis, economics = macro framework.
+**SUMMARY**
+[2-3 sentence overview connecting the key themes]
 
-LAYER 2 — MARKET ANALYSIS (on top of summary):
-- 2nd and 3rd order effects on financial markets
-- How does this affect crypto specifically?
-- Does this change anything for watchlist tokens: BTC, SOL, JUP, HYPE, RENDER, BONK, PUMP, PENGU, FARTCOIN, MSTR?
+**SEGMENT 1: [TOPIC IN CAPS]**
+
+The bull case came from **[Speaker Name]**, who argued [specific claim with numbers]. [Direct quote or paraphrase with attribution].
+
+The bear case came from **[Speaker Name]**, who warned [specific counter-argument]. [Data point or reasoning].
+
+The unresolved tension: [What was left debated/unresolved — this is the most valuable content].
+
+[Repeat for each major segment/topic discussed]
+
+**MARKET CONNECTION:** [Direct/Indirect] — [How this affects crypto markets, BTC, SOL ecosystem]
+
+**PORTFOLIO IMPACT:** [One specific line — what does this mean for positions in JUP, HYPE, RENDER, BONK, SOL, BTC?]
+
+QUALITY REQUIREMENTS:
+- **Bold speaker names** with specific attributed claims and numbers
+- Actual numbers: percentages, dollar amounts, dates, probabilities, odds
+- Bull case vs bear case for each segment where speakers disagree
+- Unresolved tensions (the most valuable insight)
+- Watchlist tokens: BTC, SOL, JUP, HYPE, RENDER, BONK, PUMP, PENGU, FARTCOIN, SUI, MSTR
 - AI/compute content → RENDER thesis. Macro/rates → cycle timing. Geopolitical → risk sentiment.
-- If connection is indirect, say so honestly: "Indirect — [explanation]"
-- If genuinely zero market connection: "None identified"
-
-FORMAT (use exactly this structure):
-
-SUMMARY:
-[Detailed flowing analysis of ALL segments. Attribute every claim. Capture every number. Focus on disagreements.]
-
-MARKET ANALYSIS:
-[2nd/3rd order effects. Crypto implications. Watchlist token connections.]
-
-PORTFOLIO IMPACT:
-[One specific line — what does this mean for positions in JUP, HYPE, RENDER, BONK, SOL?]
-
-CRITICAL: Cover the ENTIRE video — every segment, every topic. Never skip content because it "isn't about crypto." Never refuse.
+- If only one speaker, still extract claims, numbers, and market implications
 
 Video title: {title}
 Channel: {channel}
@@ -454,13 +457,17 @@ def _analyse_transcript(transcript: str, video_title: str = "", channel_name: st
     """Send transcript to Claude for analysis with retry.
     Uses Sonnet for high-priority channels, Haiku for the rest."""
     # High-priority channels get Sonnet for better extraction
-    HIGH_PRIORITY = {"All-In Podcast", "Real Vision", "Real Vision Finance",
+    HIGH_PRIORITY = {
+                     "All-In Podcast", "Lex Fridman", "Principles by Ray Dalio",
+                     "Real Vision Finance", "Real Vision", "Raoul Pal",
+                     "Impact Theory", "PowerfulJRE",
+                     "The Diary Of A CEO", "Diary of a CEO",
                      "InvestAnswers", "Benjamin Cowen", "Coin Bureau",
-                     "Virtual Bacon", "Bankless", "Crypto Crew University",
-                     "Crypto Banter", "Raoul Pal", "Lyn Alden",
-                     "Lark Davis", "Wolf of All Streets",
-                     "Diary of a CEO", "Lex Fridman", "PBD Podcast",
-                     "Principles by Ray Dalio", "Mark Moss", "Colin Talks Crypto"}
+                     "Bankless", "Crypto Banter", "VirtualBacon", "Virtual Bacon",
+                     "Mark Moss", "ColinTalksCrypto", "Colin Talks Crypto",
+                     "Krypto King", "Chart Fanatics", "Crypto Insider",
+                     "Jack Neel", "Titans of Tomorrow",
+                     }
 
     # Sonnet for all priority channels, Haiku for the rest. No keyword filter.
     model = SONNET_MODEL if channel_name in HIGH_PRIORITY else HAIKU_MODEL
@@ -613,7 +620,7 @@ def _score_relevance(analysis: dict) -> int:
     Uses Claude's relevance_score (1-10) scaled to 0-100.
     Falls back to heuristic if Claude didn't provide one.
     """
-    claude_score = analysis.get("relevance_score")
+    claude_score = analysis.get("relevance_score") or 5
     if claude_score is not None:
         try:
             return min(100, max(0, int(float(claude_score) * 10)))
@@ -977,6 +984,9 @@ def process_video(channel_name: str, video: dict, send_alert: bool = True) -> di
         if pub_str:
             header += f"\n\U0001f4c5 {pub_str}"
         header += f"\n\U0001f3ac \"{video_title}\""
+        video_link = f"https://youtube.com/watch?v={video_id}" if video_id else ""
+        if video_link:
+            header += f"\n\U0001f517 {video_link}"
 
         if is_sonnet:
             # Send full essay with header
@@ -1004,7 +1014,8 @@ def process_video(channel_name: str, video: dict, send_alert: bool = True) -> di
                 for chunk in chunks:
                     req.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
                         json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk,
-                              "parse_mode": "HTML", "disable_web_page_preview": True}, timeout=15)
+                              "parse_mode": "HTML", "disable_web_page_preview": True,
+                              "reply_markup": {"keyboard": [["📊 Intel", "🐋 Signals", "🔥 Fiery Eyes"], ["💼 Portfolio", "⚙️ System"]], "resize_keyboard": True, "is_persistent": True}}, timeout=15)
                 log.info("YouTube Sonnet analysis sent: %s (%d chars)", video_title[:50], len(essay))
             else:
                 log.info("YouTube Sonnet analysis stored (no send): %s", video_title[:50])
