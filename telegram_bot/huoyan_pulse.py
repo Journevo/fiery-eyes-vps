@@ -211,49 +211,136 @@ def _chain_scorecard_section() -> list[str]:
     return lines
 
 
+def _fmt_price(p: float) -> str:
+    """Format price based on magnitude."""
+    if p == 0:
+        return "$0"
+    if p >= 1000:
+        return f"${p:,.0f}"
+    if p >= 1:
+        return f"${p:.2f}"
+    if p >= 0.01:
+        return f"${p:.4f}"
+    if p >= 0.0001:
+        return f"${p:.6f}"
+    return f"${p:.8f}"
+
+
+def _fetch_watchlist_extra() -> dict:
+    """Fetch HYPE, RENDER, BONK from CoinGecko; PUMP/PENGU/FARTCOIN/USELESS from DexScreener."""
+    result = {}
+
+    # CoinGecko: BONK, RENDER, HYPE (24h + 7d)
+    try:
+        from config import COINGECKO_API_KEY
+        from quality_gate.helpers import get_json as _gj
+        h = {"x-cg-demo-api-key": COINGECKO_API_KEY} if COINGECKO_API_KEY else {}
+        coins = _gj(
+            "https://api.coingecko.com/api/v3/coins/markets",
+            params={
+                "vs_currency": "usd",
+                "ids": "bonk,render-token,hyperliquid",
+                "sparkline": "false",
+                "price_change_percentage": "7d",
+            },
+            headers=h,
+        )
+        CG_MAP = {"bonk": "BONK", "render-token": "RENDER", "hyperliquid": "HYPE"}
+        for c in (coins or []):
+            sym = CG_MAP.get(c.get("id", ""))
+            if sym:
+                result[sym] = {
+                    "price": c.get("current_price") or 0,
+                    "change_24h": c.get("price_change_percentage_24h") or 0,
+                    "change_7d": c.get("price_change_percentage_7d_in_currency") or 0,
+                }
+    except Exception as e:
+        log.debug("Watchlist CG fetch: %s", e)
+
+    # DexScreener: PUMP, PENGU, FARTCOIN, USELESS — lookup addresses from DB
+    DEX_WANT = {"PUMP", "PENGU", "FARTCOIN", "USELESS"}
+    try:
+        rows = execute(
+            """SELECT upper(symbol), contract_address FROM tokens
+               WHERE upper(symbol) = ANY(%s) AND contract_address IS NOT NULL
+               LIMIT 10""",
+            (list(DEX_WANT),),
+            fetch=True,
+        )
+        if rows:
+            from quality_gate.helpers import get_json as _gj
+            addr_to_sym: dict = {}
+            for sym, addr in rows:
+                if sym not in addr_to_sym.values():
+                    addr_to_sym[addr] = sym
+            addr_list = ",".join(addr_to_sym.keys())
+            data = _gj(f"https://api.dexscreener.com/latest/dex/tokens/{addr_list}")
+            for pair in ((data or {}).get("pairs") or []):
+                base_addr = (pair.get("baseToken") or {}).get("address", "")
+                sym = addr_to_sym.get(base_addr)
+                if sym and sym not in result:
+                    pc = pair.get("priceChange") or {}
+                    result[sym] = {
+                        "price": float(pair.get("priceUsd") or 0),
+                        "change_24h": float(pc.get("h24") or 0),
+                    }
+    except Exception as e:
+        log.debug("Watchlist DexScreener fetch: %s", e)
+
+    return result
+
+
 def _holdings_health_section() -> list[str]:
-    """Holdings health: SOL/JUP/Pump.fun prices and 7d changes."""
+    """Holdings health: SOL/JUP + full V5 watchlist prices."""
     lines = ["<b>💰 Holdings Health</b>"]
+    added = 0
+
+    # SOL + JUP from stored holdings (24h + 7d)
     try:
         from chain_metrics.holdings import get_holdings_summary
         holdings = get_holdings_summary()
-        if holdings:
-            for token in ("SOL", "JUP", "PUMPFUN"):
-                h = holdings.get(token)
-                if not h:
-                    continue
-                price = h.get("price", 0)
-                change = h.get("change_7d", 0)
-                arrow = "📈" if change > 0 else "📉" if change < 0 else "➡️"
-                if token == "SOL":
-                    ratio = h.get("sol_btc_ratio", 0)
-                    ratio_str = f" | SOL/BTC: {ratio:.6f}" if ratio else ""
-                    lines.append(f"  SOL: ${price:.2f} (7d: {change:+.1f}%){ratio_str} {arrow}")
-                elif token == "JUP":
-                    lines.append(f"  JUP: ${price:.4f} (7d: {change:+.1f}%) {arrow}")
-                elif token == "PUMPFUN":
-                    label = h.get("symbol", "PUMP")
-                    fees_24h = h.get("fees_24h", 0)
-                    proto_vol = h.get("protocol_volume_24h", 0)
-                    fees_str = f" | Fees: ${fees_24h / 1e3:.0f}K/24h" if fees_24h else ""
-                    vol_str = f" | Vol: ${proto_vol / 1e6:.0f}M" if proto_vol else ""
-                    lines.append(f"  {label}: ${price:.6f} (7d: {change:+.1f}%){fees_str}{vol_str} {arrow}")
-        else:
-            lines.append("  No holdings data yet — run holdings")
+        for token, fmt in (("SOL", "${:.2f}"), ("JUP", "${:.4f}")):
+            h = holdings.get(token)
+            if not h:
+                continue
+            price = h.get("price", 0)
+            c24 = h.get("change_24h", 0)
+            c7d = h.get("change_7d", 0)
+            arrow = "📈" if c24 > 0 else "📉" if c24 < 0 else "➡️"
+            p_str = fmt.format(price)
+            lines.append(f"  {token}: {p_str} {arrow} 24h:{c24:+.1f}% 7d:{c7d:+.1f}%")
+            added += 1
     except Exception:
-        lines.append("  Holdings data unavailable")
+        pass
+
+    # Watchlist extras: HYPE, RENDER, BONK, PUMP, PENGU, FARTCOIN, USELESS
+    extra = _fetch_watchlist_extra()
+    for sym in ("HYPE", "RENDER", "BONK", "PUMP", "PENGU", "FARTCOIN", "USELESS"):
+        d = extra.get(sym)
+        if not d or not d.get("price"):
+            continue
+        price = d["price"]
+        c24 = d.get("change_24h", 0)
+        c7d = d.get("change_7d")
+        arrow = "📈" if c24 > 0 else "📉" if c24 < 0 else "➡️"
+        ch_str = f"24h:{c24:+.1f}%"
+        if c7d is not None:
+            ch_str += f" 7d:{c7d:+.1f}%"
+        lines.append(f"  {sym}: {_fmt_price(price)} {arrow} {ch_str}")
+        added += 1
+
+    if added == 0:
+        lines.append("  No holdings data yet")
 
     lines.append("")
     return lines
 
 
 def _positions_section() -> list[str]:
-    """Health dashboard for open positions (shadow or real)."""
-    lines = ["<b>🏥 Positions</b>"]
+    """Health dashboard for open positions — hidden if empty."""
     try:
         rows = execute(
-            """SELECT st.token_symbol, st.current_pnl_pct, st.status,
-                      st.entry_source, st.phases_entered,
+            """SELECT st.token_symbol, st.current_pnl_pct,
                       hs.scaled_score, hs.confidence_pct, hs.recommended_action
                FROM shadow_trades st
                LEFT JOIN LATERAL (
@@ -266,24 +353,23 @@ def _positions_section() -> list[str]:
                ORDER BY st.entry_time DESC LIMIT 5""",
             fetch=True,
         )
-        if rows:
-            for sym, pnl, status, source, phases, health, conf, action in rows:
-                pnl_str = f"{float(pnl or 0):+.1f}%" if pnl else "?"
-                health_str = f"{float(health or 0):.0f}" if health else "?"
-                conf_str = f"{float(conf or 0):.0f}%" if conf else "?"
-                emoji = "🟢" if float(health or 0) >= 65 else "🟡" if float(health or 0) >= 50 else "🔴"
-                lines.append(
-                    f"  {emoji} ${sym or '?'}: {pnl_str} | H:{health_str} "
-                    f"({conf_str}) | {action or '?'}"
-                )
-        else:
-            lines.append("  No open positions")
+        if not rows:
+            return []
+        lines = ["<b>🏥 Positions</b>"]
+        for sym, pnl, health, conf, action in rows:
+            pnl_str = f"{float(pnl or 0):+.1f}%" if pnl else "?"
+            health_str = f"{float(health or 0):.0f}" if health else "?"
+            conf_str = f"{float(conf or 0):.0f}%" if conf else "?"
+            emoji = "🟢" if float(health or 0) >= 65 else "🟡" if float(health or 0) >= 50 else "🔴"
+            lines.append(
+                f"  {emoji} ${sym or '?'}: {pnl_str} | H:{health_str} "
+                f"({conf_str}) | {action or '?'}"
+            )
+        lines.append("")
+        return lines
     except Exception as e:
         log.debug("Positions section error: %s", e)
-        lines.append("  Position data unavailable")
-
-    lines.append("")
-    return lines
+        return []
 
 
 def _kol_activity_section() -> list[str]:
@@ -319,8 +405,7 @@ def _kol_activity_section() -> list[str]:
 
 
 def _youtube_section() -> list[str]:
-    """YouTube intel from last 4 hours."""
-    lines = ["<b>📺 YouTube Intel</b>"]
+    """YouTube intel from last 4 hours — hidden if nothing relevant."""
     try:
         rows = execute(
             """SELECT channel_name, title, analysis_json, relevance_score
@@ -331,45 +416,41 @@ def _youtube_section() -> list[str]:
                LIMIT 3""",
             fetch=True,
         )
-        if rows:
-            for channel, title, analysis, score in rows:
-                aj = analysis if isinstance(analysis, dict) else {}
-                outlook = aj.get("overall_outlook", "neutral")
-                icon = {"bullish": "🟢", "bearish": "🔴"}.get(outlook, "🟡")
-                tokens = aj.get("tokens_mentioned", [])
-                tok_str = ", ".join(t.get("symbol", "") for t in tokens[:3]) if tokens else ""
-                line = f"  {icon} {channel}: \"{(title or '')[:40]}\" — {outlook}"
-                if tok_str:
-                    line += f", mentioned {tok_str}"
-                lines.append(line)
-        else:
-            lines.append("  ⚪ No relevant videos in 4h")
+        if not rows:
+            return []
+        lines = ["<b>📺 YouTube Intel</b>"]
+        for channel, title, analysis, score in rows:
+            aj = analysis if isinstance(analysis, dict) else {}
+            outlook = aj.get("overall_outlook", "neutral")
+            icon = {"bullish": "🟢", "bearish": "🔴"}.get(outlook, "🟡")
+            tokens = aj.get("tokens_mentioned", [])
+            tok_str = ", ".join(t.get("symbol", "") for t in tokens[:3]) if tokens else ""
+            line = f"  {icon} {channel}: \"{(title or '')[:40]}\" — {outlook}"
+            if tok_str:
+                line += f", mentioned {tok_str}"
+            lines.append(line)
+        lines.append("")
+        return lines
     except Exception as e:
         log.debug("YouTube section error: %s", e)
-        lines.append("  YouTube data unavailable")
-
-    lines.append("")
-    return lines
+        return []
 
 
 def _x_intelligence_section() -> list[str]:
-    """X smart money signals from last 4 hours, grouped by category."""
-    lines = ["<b>📡 X Intelligence</b>"]
+    """X smart money signals from last 4 hours — hidden if none."""
     try:
         from social.grok_poller import get_recent_x_signals
         signals = get_recent_x_signals(hours=4, min_strength="medium")
         if not signals:
-            lines.append("  ⚪ No smart money signals in 4h")
-            lines.append("")
-            return lines
+            return []
 
+        lines = ["<b>📡 X Intelligence</b>"]
         # Group by category
         groups = {}
         for sig in signals:
             cat = sig.get("signal_category", "info")
             groups.setdefault(cat, []).append(sig)
 
-        # Display order: risk > macro > ecosystem > infra > meme
         cat_config = [
             ("risk",      "⚠️ Risk Alerts"),
             ("macro",     "📊 Macro"),
@@ -389,7 +470,6 @@ def _x_intelligence_section() -> list[str]:
                 symbol = sig.get("token_symbol")
                 strength = sig.get("signal_strength", "?")
                 amount = sig.get("amount_usd")
-
                 icon = "🔴" if strength == "strong" else "🟡"
                 sym_str = f" ${symbol}" if symbol else ""
                 amount_str = f" (${amount:,.0f})" if amount else ""
@@ -399,55 +479,46 @@ def _x_intelligence_section() -> list[str]:
             if shown >= 6:
                 break
 
-        # Uncategorized / info signals — show count only
         info_count = len(groups.get("info", []))
         if info_count and shown == 0:
             lines.append(f"  {info_count} general signals (no macro/risk themes)")
+
+        lines.append("")
+        return lines
     except Exception as e:
         log.debug("X intelligence section error: %s", e)
-        lines.append("  X data unavailable")
-
-    lines.append("")
-    return lines
+        return []
 
 
 def _smart_money_radar_section() -> list[str]:
-    """Smart money convergence radar — cross-source wallet convergence."""
-    lines = ["<b>🎯 Smart Money Radar</b>"]
+    """Smart money convergence radar — hidden if quiet."""
     try:
         from wallets.convergence_detector import get_radar_summary
         radar = get_radar_summary()
-        # Only show convergences at EMERGING (8+) or STRONG (12+)
         strong_signals = [
             c for c in radar.get("convergences", [])
             if c["convergence_level"] in ("EMERGING", "STRONG CONVERGENCE")
         ]
-        if strong_signals:
-            for conv in strong_signals[:3]:
-                symbol = f"${conv['token_symbol']}" if conv.get("token_symbol") else conv["token_address"][:12]
-                level = conv["convergence_level"]
-                level_map = {
-                    "STRONG CONVERGENCE": "🔴",
-                    "EMERGING": "🟡",
-                }
-                icon = level_map.get(level, "🟡")
-                lines.append(
-                    f"  {icon} {symbol}: {conv['wallet_count']} wallets, "
-                    f"score {conv['weighted_score']:.1f} [{level}]"
-                )
-        else:
-            lines.append("  🔇 Quiet — no strong meme signals")
+        if not strong_signals:
+            return []
+        lines = ["<b>🎯 Smart Money Radar</b>"]
+        for conv in strong_signals[:3]:
+            symbol = f"${conv['token_symbol']}" if conv.get("token_symbol") else conv["token_address"][:12]
+            level = conv["convergence_level"]
+            icon = {"STRONG CONVERGENCE": "🔴", "EMERGING": "🟡"}.get(level, "🟡")
+            lines.append(
+                f"  {icon} {symbol}: {conv['wallet_count']} wallets, "
+                f"score {conv['weighted_score']:.1f} [{level}]"
+            )
+        lines.append("")
+        return lines
     except Exception as e:
         log.debug("Smart money radar section: %s", e)
-        lines.append("  Radar data unavailable")
-
-    lines.append("")
-    return lines
+        return []
 
 
 def _scanner_section() -> list[str]:
-    """Scanner summary."""
-    lines = ["<b>🔍 Scanner</b>"]
+    """Scanner summary — hidden if no activity."""
     try:
         row = execute_one(
             """SELECT
@@ -456,16 +527,15 @@ def _scanner_section() -> list[str]:
                FROM alerts
                WHERE timestamp > NOW() - INTERVAL '4 hours'""",
         )
-        if row:
-            passes, total = row
-            lines.append(f"  Last 4h: {total} scanned, {passes} passed")
-        else:
-            lines.append("  No scans in 4h")
+        if not row or (row[1] == 0):
+            return []
+        passes, total = row
+        lines = ["<b>🔍 Scanner</b>"]
+        lines.append(f"  Last 4h: {total} scanned, {passes} passed")
+        lines.append("")
+        return lines
     except Exception:
-        lines.append("  Scanner data unavailable")
-
-    lines.append("")
-    return lines
+        return []
 
 
 def _morning_watchlist() -> list[str]:

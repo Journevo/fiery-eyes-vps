@@ -270,15 +270,13 @@ def main_loop():
         try:
             now = datetime.now(timezone.utc)
 
-            # Tier 1 KOL wallets — every 3min
-            if _should_run('tier1_kol', INTERVAL_TIER1_KOL):
-                threading.Thread(target=run_tier1_kol, daemon=True).start()
-                _mark_run('tier1_kol')
-
-            # Tier 2 KOL wallets — every 10min
-            if _should_run('tier2_kol', INTERVAL_TIER2_KOL):
-                threading.Thread(target=run_tier2_kol, daemon=True).start()
-                _mark_run('tier2_kol')
+            # KOL wallet monitoring disabled — Helius 429, rebuild planned
+            # if _should_run('tier1_kol', INTERVAL_TIER1_KOL):
+            #     threading.Thread(target=run_tier1_kol, daemon=True).start()
+            #     _mark_run('tier1_kol')
+            # if _should_run('tier2_kol', INTERVAL_TIER2_KOL):
+            #     threading.Thread(target=run_tier2_kol, daemon=True).start()
+            #     _mark_run('tier2_kol')
 
             # Hatchling scoring — every 15min
             if _should_run('hatchling', INTERVAL_HATCHLING):
