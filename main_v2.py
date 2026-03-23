@@ -104,8 +104,11 @@ def run_tier2_kol():
         _helius_busy.release()
 
 
+V5_WATCHLIST = {'JUP', 'HYPE', 'RENDER', 'BONK', 'SOL', 'PUMP', 'PENGU', 'FARTCOIN', 'USELESS'}
+
+
 def run_health_scoring(tier: str):
-    """Score tokens of a given tier."""
+    """Score tokens of a given tier — watchlist tokens first."""
     if not _helius_busy.acquire(blocking=False):
         log.debug("Skipping health scoring (%s) — Helius busy", tier)
         return
@@ -122,8 +125,11 @@ def run_health_scoring(tier: str):
             """SELECT contract_address, symbol FROM tokens
                WHERE quality_gate_pass = TRUE
                  AND (token_tier = %s OR token_tier IS NULL)
-               ORDER BY updated_at ASC LIMIT 20""",
-            (tier_filter,),
+               ORDER BY
+                 CASE WHEN upper(symbol) = ANY(%s) THEN 0 ELSE 1 END ASC,
+                 updated_at ASC
+               LIMIT 20""",
+            (tier_filter, list(V5_WATCHLIST)),
             fetch=True,
         )
 

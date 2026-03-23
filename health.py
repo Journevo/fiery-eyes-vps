@@ -163,6 +163,19 @@ def root():
 
 
 def run_health_server():
+    import subprocess
     port = int(os.getenv("HEALTH_PORT", "8080"))
+    # Kill any existing process on this port before binding
+    try:
+        result = subprocess.run(
+            ["lsof", "-t", f"-i:{port}"], capture_output=True, text=True, timeout=5
+        )
+        pids = result.stdout.strip().split()
+        for pid in pids:
+            if pid.isdigit():
+                subprocess.run(["kill", "-9", pid], timeout=5)
+                log.info("Killed stale process %s on port %d", pid, port)
+    except Exception:
+        pass
     log.info("Starting health server on port %d", port)
     app.run(host="0.0.0.0", port=port, debug=False)

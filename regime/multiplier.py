@@ -14,6 +14,7 @@ Regime-adjusted allocation rules:
 """
 
 import math
+import time
 from datetime import date, datetime, timezone
 from config import COINGECKO_API_KEY, get_logger
 from db.connection import execute, execute_one
@@ -23,6 +24,11 @@ log = get_logger("regime.multiplier")
 
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 FEAR_GREED_URL = "https://api.alternative.me/fng/"
+
+# Cache for get_regime_state() — refreshed at most once per 30 minutes
+_regime_state_cache: dict | None = None
+_regime_state_cache_ts: float = 0
+_REGIME_STATE_TTL = 1800  # 30 minutes
 
 
 # ---------------------------------------------------------------------------
@@ -431,6 +437,10 @@ def get_regime_state() -> dict:
             'details': str,
         }
     """
+    global _regime_state_cache, _regime_state_cache_ts
+    if _regime_state_cache is not None and (time.time() - _regime_state_cache_ts) < _REGIME_STATE_TTL:
+        return _regime_state_cache
+
     # Fetch BTC 24h change
     btc_24h_pct = 0
     fear_greed = 50
@@ -470,13 +480,16 @@ def get_regime_state() -> dict:
     # Reduced confidence widens thresholds
     confidence = max(0, min(100, confidence))
 
-    return {
+    result = {
         'state': state,
         'confidence': confidence,
         'btc_24h_pct': round(btc_24h_pct, 2),
         'fear_greed': fear_greed,
         'details': details,
     }
+    _regime_state_cache = result
+    _regime_state_cache_ts = time.time()
+    return result
 
 
 def get_allocation_guidance(regime_multiplier: float, composite_score: float) -> dict:

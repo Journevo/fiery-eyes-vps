@@ -92,6 +92,7 @@ def check_kol_wallets(tier_filter: int | None = None):
                           sol_price)
         except Exception as e:
             log.error("Error checking wallet %s (%s): %s", name, address[:12], e)
+        time.sleep(2)  # stagger Helius calls to avoid 429
 
 
 def _check_wallet(wallet_id: int, name: str, address: str, tier: int,
