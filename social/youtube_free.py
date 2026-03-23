@@ -24,7 +24,7 @@ from xml.etree import ElementTree
 import requests
 from youtube_transcript_api import YouTubeTranscriptApi
 
-from config import ANTHROPIC_API_KEY, YOUTUBE_COOKIES_FILE, YOUTUBE_PROXY_URL, get_logger
+from config import ANTHROPIC_API_KEY, YOUTUBE_API_KEY, YOUTUBE_COOKIES_FILE, YOUTUBE_PROXY_URL, get_logger
 from db.connection import execute, execute_one
 from telegram_bot.alerts import _send, send_message
 
@@ -33,6 +33,10 @@ log = get_logger("social.youtube")
 CHANNELS_FILE = Path(__file__).parent / "youtube_channels.json"
 COOKIES_FILE = Path(YOUTUBE_COOKIES_FILE)
 RSS_URL = "https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+YT_API_BASE = "https://www.googleapis.com/youtube/v3"
+
+# Cache: channel_id -> uploads_playlist_id (avoids repeated /channels API calls)
+_uploads_cache: dict = {}
 YT_DLP = Path(__file__).parents[1] / "venv" / "bin" / "yt-dlp"
 
 # Anthropic models
@@ -127,7 +131,8 @@ def add_channel(name: str, channel_id: str, priority: str = "medium") -> bool:
 # ---------------------------------------------------------------------------
 
 def _fetch_rss(channel_id: str) -> list[dict]:
-    """Fetch recent videos from a channel's RSS feed."""
+    """Fetch recent videos — RSS primary, YouTube Data API fallback."""
+    # Try RSS first
     try:
         resp = requests.get(
             RSS_URL.format(channel_id=channel_id),
@@ -166,23 +171,112 @@ def _fetch_rss(channel_id: str) -> list[dict]:
                     "url": f"https://www.youtube.com/watch?v={video_id.text}",
                 })
 
+        if videos:
+            return videos
+    except Exception as e:
+        log.debug("RSS fetch failed for %s: %s — trying Data API", channel_id, e)
+
+    # Fallback: YouTube Data API v3
+    return _fetch_videos_api(channel_id)
+
+
+def _fetch_videos_api(channel_id: str) -> list[dict]:
+    """Fetch recent videos via YouTube Data API v3 (RSS fallback)."""
+    if not YOUTUBE_API_KEY:
+        return []
+    try:
+        # Get uploads playlist ID (cached per process)
+        uploads_id = _uploads_cache.get(channel_id)
+        if not uploads_id:
+            r = requests.get(
+                f"{YT_API_BASE}/channels",
+                params={"id": channel_id, "part": "contentDetails", "key": YOUTUBE_API_KEY},
+                timeout=10,
+            )
+            r.raise_for_status()
+            items = r.json().get("items", [])
+            if not items:
+                log.debug("YouTube API: no channel found for %s", channel_id)
+                return []
+            uploads_id = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
+            _uploads_cache[channel_id] = uploads_id
+
+        # Fetch 15 most recent videos from uploads playlist
+        r2 = requests.get(
+            f"{YT_API_BASE}/playlistItems",
+            params={
+                "playlistId": uploads_id,
+                "part": "snippet",
+                "maxResults": 15,
+                "key": YOUTUBE_API_KEY,
+            },
+            timeout=10,
+        )
+        r2.raise_for_status()
+        videos = []
+        for item in r2.json().get("items", []):
+            snippet = item.get("snippet", {})
+            vid_id = (snippet.get("resourceId") or {}).get("videoId")
+            if not vid_id:
+                continue
+            pub_str = snippet.get("publishedAt", "")
+            pub_dt = None
+            if pub_str:
+                try:
+                    pub_dt = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
+                except ValueError:
+                    pass
+            videos.append({
+                "video_id": vid_id,
+                "title": snippet.get("title", ""),
+                "published_at": pub_dt,
+                "url": f"https://www.youtube.com/watch?v={vid_id}",
+            })
+        log.debug("YouTube Data API: %d videos for %s", len(videos), channel_id)
         return videos
     except Exception as e:
-        log.debug("RSS fetch failed for %s: %s", channel_id, e)
+        log.error("YouTube Data API failed for %s: %s", channel_id, e)
         return []
 
 
 def _is_processed(video_id: str) -> bool:
-    """Check if video already processed."""
-    row = execute_one(
-        "SELECT 1 FROM youtube_videos WHERE video_id = %s", (video_id,)
-    )
-    return row is not None
+    """Check if video is processed. Retry if transcript missing and under retry limit."""
+    MAX_RETRIES = 4
+    try:
+        row = execute_one(
+            "SELECT transcript_text, retry_count, permanently_failed FROM youtube_videos WHERE video_id = %s",
+            (video_id,))
+        if row is None:
+            return False
+        transcript, retry_count, perm_failed = row[0], row[1] or 0, row[2] or False
+        if perm_failed:
+            return True  # Stop retrying
+        has_transcript = transcript is not None and len(transcript or "") > 200
+        if has_transcript:
+            return True
+        # No transcript — check retry eligibility
+        if retry_count >= MAX_RETRIES:
+            execute("UPDATE youtube_videos SET permanently_failed = TRUE, fail_reason = %s WHERE video_id = %s",
+                    ("max retries (%d) exceeded" % MAX_RETRIES, video_id))
+            log.info("Permanently failed: %s (retry %d/%d)", video_id, retry_count, MAX_RETRIES)
+            return True
+        # Check age — only retry if > 4h old
+        age_row = execute_one("SELECT processed_at FROM youtube_videos WHERE video_id = %s", (video_id,))
+        if age_row and age_row[0]:
+            from datetime import datetime, timezone, timedelta
+            processed = age_row[0]
+            if processed.tzinfo is None:
+                processed = processed.replace(tzinfo=timezone.utc)
+            age = datetime.now(timezone.utc) - processed
+            if age > timedelta(hours=4):
+                execute("UPDATE youtube_videos SET retry_count = retry_count + 1 WHERE video_id = %s", (video_id,))
+                execute("DELETE FROM youtube_videos WHERE video_id = %s", (video_id,))
+                log.info("Retry %d/%d: %s (no transcript, %dh old)", retry_count + 1, MAX_RETRIES, video_id, int(age.total_seconds() // 3600))
+                return False
+        return True  # Too recent, wait
+    except Exception:
+        return False
 
-
-# ---------------------------------------------------------------------------
-# Caption download + parsing
-# ---------------------------------------------------------------------------
 
 def _build_ytt_client() -> YouTubeTranscriptApi:
     """Build YouTubeTranscriptApi with Webshare residential proxy."""
@@ -244,6 +338,7 @@ def _download_captions_ytdlp(video_url: str, video_id: str) -> str | None:
             "--sub-lang", "en",
             "--skip-download",
             "--sub-format", "vtt",
+            "--remote-components", "ejs:github",
             "-o", str(tmp_dir / "%(id)s"),
         ]
         if COOKIES_FILE.exists():
@@ -465,7 +560,7 @@ def _analyse_transcript(transcript: str, video_title: str = "", channel_name: st
                      "InvestAnswers", "Benjamin Cowen", "Coin Bureau",
                      "Bankless", "Crypto Banter", "VirtualBacon", "Virtual Bacon",
                      "Mark Moss", "ColinTalksCrypto", "Colin Talks Crypto",
-                     "Krypto King", "Chart Fanatics", "Crypto Insider",
+                     "Tyrelle Anderson-Brown", "Krypto King", "Chart Fanatics", "Crypto Insider",
                      "Jack Neel", "Titans of Tomorrow",
                      }
 
@@ -1252,3 +1347,55 @@ def youtube_report_section() -> list[str]:
 
     lines.append("")
     return lines
+
+
+
+def retry_failed_videos(max_age_hours=48):
+    """Force retry ALL failed videos from last N hours. Returns results list."""
+    from db.connection import execute as db_exec
+    rows = db_exec("""
+        SELECT video_id, channel_name, title, retry_count
+        FROM youtube_videos
+        WHERE processed_at > NOW() - INTERVAL '%s hours'
+          AND (transcript_text IS NULL OR LENGTH(transcript_text) < 200)
+          AND (permanently_failed IS NULL OR permanently_failed = FALSE)
+        ORDER BY processed_at DESC
+    """ % int(max_age_hours), fetch=True)
+
+    if not rows:
+        return []
+
+    results = []
+    import time as _time
+    for r in (rows or []):
+        vid, channel, title, retries = r[0], r[1], r[2], r[3] or 0
+        url = "https://youtube.com/watch?v=%s" % vid
+        log.info("Retrying: %s - %s (attempt %d)", channel, (title or "?")[:40], retries + 1)
+
+        transcript = _download_captions(url, vid)
+        if transcript and len(transcript) > 200:
+            db_exec("UPDATE youtube_videos SET transcript_text = %s, retry_count = %s WHERE video_id = %s",
+                    (transcript, retries + 1, vid))
+            results.append({"video_id": vid, "channel": channel, "title": title,
+                            "status": "recovered", "chars": len(transcript)})
+            log.info("Recovered: %s - %d chars", channel, len(transcript))
+
+            try:
+                analysis = _analyse_transcript(transcript, title or "", channel_name=channel or "")
+                if analysis:
+                    import json
+                    aj = json.dumps(analysis) if isinstance(analysis, dict) else str(analysis)
+                    db_exec("UPDATE youtube_videos SET analysis_json = %s WHERE video_id = %s", (aj, vid))
+                    log.info("Re-analysed: %s", channel)
+            except Exception as e:
+                log.error("Re-analysis failed for %s: %s", vid, e)
+        else:
+            db_exec("UPDATE youtube_videos SET retry_count = %s, fail_reason = %s WHERE video_id = %s",
+                    (retries + 1, "no captions available", vid))
+            results.append({"video_id": vid, "channel": channel, "title": title,
+                            "status": "failed", "chars": 0})
+            log.info("Still failed: %s", channel)
+
+        _time.sleep(3)
+
+    return results

@@ -913,6 +913,33 @@ async def cmd_deepdive_research(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
 
 
+async def cmd_retry(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Force retry all failed YouTube transcript downloads."""
+    await update.message.reply_text("\U0001f504 Retrying failed videos (48h)...", reply_markup=MAIN_KEYBOARD)
+    try:
+        from social.youtube_free import retry_failed_videos
+        results = retry_failed_videos(max_age_hours=48)
+        if not results:
+            await update.message.reply_text("No failed videos to retry.", reply_markup=MAIN_KEYBOARD)
+            return
+        lines = ["\U0001f504 <b>RETRY RESULTS</b>\n"]
+        recovered = 0
+        for r in results:
+            if r["status"] == "recovered":
+                recovered += 1
+                lines.append("\u2705 %s \u2014 \"%s\" \u2014 %s chars recovered" % (
+                    r["channel"], r["title"][:35], "{:,}".format(r["chars"])))
+            else:
+                lines.append("\u274c %s \u2014 still no captions" % r["channel"])
+        lines.append("\nRecovered: %d/%d" % (recovered, len(results)))
+        if recovered > 0:
+            lines.append("Now analysing recovered videos...")
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+    except Exception as e:
+        log.error("/retry error: %s", e)
+        await update.message.reply_text("Error: " + str(e), reply_markup=MAIN_KEYBOARD)
+
+
 async def cmd_notebook(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Generate and send the daily notebook for Opus."""
     await update.message.reply_text("Generating notebook...", reply_markup=MAIN_KEYBOARD)
@@ -1241,6 +1268,7 @@ def main():
     app.add_handler(CommandHandler("menu", cmd_menu))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("notebook", cmd_notebook))
+    app.add_handler(CommandHandler("retry", cmd_retry))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("start", cmd_help))
 

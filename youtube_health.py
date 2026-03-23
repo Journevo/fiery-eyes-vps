@@ -45,7 +45,9 @@ def generate_health_report() -> str:
     rows = execute("""
         SELECT channel_name, title, processed_at, video_id,
                CASE WHEN transcript_text IS NOT NULL AND LENGTH(transcript_text) > 100
-                    THEN TRUE ELSE FALSE END as has_transcript
+                    THEN TRUE ELSE FALSE END as has_transcript,
+               COALESCE(retry_count, 0) as retry_count,
+               COALESCE(permanently_failed, FALSE) as perm_failed
         FROM youtube_videos
         WHERE processed_at > CURRENT_DATE
         ORDER BY processed_at DESC
@@ -74,18 +76,28 @@ def generate_health_report() -> str:
     if sonnet_videos:
         lines.append("<b>SONNET:</b>")
         for r in sonnet_videos:
-            ch, title, ts, vid, has_tx = r
+            ch, title, ts, vid, has_tx, retries, perm = r[0], r[1], r[2], r[3], r[4], r[5] if len(r) > 5 else 0, r[6] if len(r) > 6 else False
             time_str = ts.strftime("%H:%M") if ts else "?"
-            icon = "\u2705" if has_tx else "\u274c"
+            if has_tx:
+                icon = "\u2705"
+            elif perm:
+                icon = "\U0001f6ab"  # permanently failed
+            else:
+                icon = "\u274c (retry %d/4)" % retries if retries else "\u274c"
             lines.append("%s %s \u2014 \"%s\" \u2014 %s" % (icon, ch, (title or "?")[:40], time_str))
         lines.append("")
 
     if haiku_videos:
         lines.append("<b>HAIKU:</b>")
         for r in haiku_videos[:10]:  # Cap at 10
-            ch, title, ts, vid, has_tx = r
+            ch, title, ts, vid, has_tx, retries, perm = r[0], r[1], r[2], r[3], r[4], r[5] if len(r) > 5 else 0, r[6] if len(r) > 6 else False
             time_str = ts.strftime("%H:%M") if ts else "?"
-            icon = "\u2705" if has_tx else "\u274c"
+            if has_tx:
+                icon = "\u2705"
+            elif perm:
+                icon = "\U0001f6ab"  # permanently failed
+            else:
+                icon = "\u274c (retry %d/4)" % retries if retries else "\u274c"
             lines.append("%s %s \u2014 \"%s\" \u2014 %s" % (icon, ch, (title or "?")[:40], time_str))
         if len(haiku_videos) > 10:
             lines.append("  +%d more" % (len(haiku_videos) - 10))
