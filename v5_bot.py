@@ -1053,15 +1053,24 @@ def _run_scheduled():
 
     def job_youtube_scan():
         """Every 2h: scan all channels for new videos, analyse, store in DB.
-        NO individual Telegram messages — best findings go into Morning/Evening reports."""
+        Runs in a sub-thread with 30min timeout to prevent scheduler hangs."""
         log.info("Running YouTube auto-scan")
-        try:
-            from social.youtube_free import run_youtube_scan
-            result = run_youtube_scan(send_alerts=True)
-            if result:
-                log.info("YouTube scan: %d new videos processed", result.get("new_videos", 0))
-        except Exception as e:
-            log.error("YouTube scan failed: %s", e)
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(_youtube_scan_worker)
+            try:
+                future.result(timeout=1800)
+            except concurrent.futures.TimeoutError:
+                log.error("YouTube scan TIMED OUT after 30 minutes")
+            except Exception as e:
+                log.error("YouTube scan failed: %s", e)
+
+    def _youtube_scan_worker():
+        from social.youtube_free import run_youtube_scan
+        result = run_youtube_scan(send_alerts=True)
+        if result:
+            log.info("YouTube scan: %d new videos processed", result.get("new_videos", 0))
+        return result
 
     def job_nimbus_sync():
         """05:45 UTC: Sync Nimbus data from Jingubang (after autopull at 05:30)."""
@@ -1203,7 +1212,10 @@ def _run_scheduled():
     log.info("  Every 4h   Watchlist + swaps")
 
     while True:
-        schedule.run_pending()
+        try:
+            schedule.run_pending()
+        except Exception as e:
+            log.error("Scheduler tick error: %s", e)
         time.sleep(60)
 
 
