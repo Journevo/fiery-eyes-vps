@@ -142,6 +142,21 @@ def _gather_sunflow():
         return "SunFlow: unavailable (%s)" % e
 
 
+
+def _gather_macro_pulse():
+    try:
+        from macro.dashboard_formatter import format_macro_pulse, format_macro_changes
+        parts = []
+        pulse = format_macro_pulse()
+        if pulse:
+            parts.append(pulse)
+        changes = format_macro_changes()
+        if changes:
+            parts.append(changes)
+        return "\n".join(parts) if parts else "Macro: no data yet"
+    except Exception as e:
+        return "Macro pulse: unavailable (%s)" % e
+
 def _gather_opus_feedback():
     try:
         from opus_feedback import notebook_consensus_shift, notebook_voice_accuracy, notebook_new_claims
@@ -196,6 +211,11 @@ def generate_notebook():
         "MARKET STATE",
         "=" * 50,
         _gather_market(),
+        "",
+        "=" * 50,
+        "MACRO PULSE",
+        "=" * 50,
+        _gather_macro_pulse(),
         "",
         "=" * 50,
         "POSITIONS",

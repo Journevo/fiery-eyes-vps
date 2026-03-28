@@ -209,6 +209,15 @@ def generate_report(send_to_telegram: bool = False, report_type: str = "morning"
             f"<b>LONG:</b> DXY {dxy_str} | {alignment}"
         )
 
+
+    # ━━━ MACRO CHANGES ━━━
+    try:
+        from macro.dashboard_formatter import format_macro_changes
+        macro_section = format_macro_changes()
+        if macro_section:
+            sections.append("\n" + macro_section)
+    except Exception as e:
+        log.error("Macro changes section failed: %s", e)
     # ━━━ WUKONG REGIME ━━━
     try:
         from nimbus_sync import format_regime_for_report, get_nimbus_section

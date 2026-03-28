@@ -985,6 +985,15 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "<b>Tracking:</b>\n"
         "/ledger — recent recommendations\n"
         "\n"
+        "\n"
+        "<b>Macro:</b>\n"
+        "/macro — full macro dashboard\n"
+        "/macro yields — inflation + yields\n"
+        "/macro employment — US economy\n"
+        "/macro global — international + carry trade\n"
+        "/macro commodities — commodities + currencies\n"
+        "/macro indices — indices + stocks\n"
+        "/macrothresholds — threshold monitor\n"
         "<b>Opus Feedback:</b>\n"
         "/update — push Opus scores/claims/consensus\n"
         "/consensus TOKEN — 7-day sentiment trend\n"
@@ -997,6 +1006,38 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(msg, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
 
+
+# ---------------------------------------------------------------------------
+# Macro Dashboard
+# ---------------------------------------------------------------------------
+
+async def cmd_macro(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show macro dashboard. /macro [section]"""
+    args = (update.message.text or "").split()
+    try:
+        if len(args) >= 2:
+            from macro.dashboard_formatter import format_section
+            msg = format_section(args[1])
+            await update.message.reply_text(msg, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+        else:
+            from macro.dashboard_formatter import format_full_dashboard
+            msgs = format_full_dashboard()
+            for msg in msgs:
+                if msg.strip():
+                    await update.message.reply_text(msg, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+    except Exception as e:
+        log.error("Macro command failed: %s", e, exc_info=True)
+        await update.message.reply_text("Error: %s" % e, reply_markup=MAIN_KEYBOARD)
+
+
+async def cmd_macro_thresholds(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show macro threshold monitor."""
+    try:
+        from macro.threshold_monitor import format_thresholds_telegram
+        msg = format_thresholds_telegram()
+        await update.message.reply_text(msg, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+    except Exception as e:
+        await update.message.reply_text("Error: %s" % e, reply_markup=MAIN_KEYBOARD)
 
 # ---------------------------------------------------------------------------
 # Opus Feedback Loop
@@ -1283,6 +1324,48 @@ def _run_scheduled():
     schedule.every().sunday.at("08:00").do(job_weekly)
     schedule.every().sunday.at("00:00").do(job_thesis_validation)
 
+    def job_macro_fetch():
+        """Every 6h: fetch FRED daily + Yahoo + recalc deltas + check thresholds."""
+        log.info("Running macro data fetch")
+        try:
+            from macro.fred_fetcher import fetch_fred_daily
+            fetch_fred_daily()
+        except Exception as e:
+            log.error("FRED daily fetch failed: %s", e)
+        try:
+            from macro.yahoo_fetcher import fetch_yahoo_all
+            fetch_yahoo_all()
+        except Exception as e:
+            log.error("Yahoo fetch failed: %s", e)
+        try:
+            from macro.delta_calculator import calculate_all_deltas
+            calculate_all_deltas()
+        except Exception as e:
+            log.error("Delta calculation failed: %s", e)
+        try:
+            from macro.threshold_monitor import check_thresholds
+            check_thresholds(send_alerts=True)
+        except Exception as e:
+            log.error("Threshold check failed: %s", e)
+
+    def job_macro_monthly():
+        """Daily 14:00: check for FRED monthly/quarterly releases."""
+        log.info("Running FRED monthly check")
+        try:
+            from macro.fred_fetcher import fetch_fred_monthly, fetch_fred_weekly
+            fetch_fred_weekly()
+            fetch_fred_monthly()
+        except Exception as e:
+            log.error("FRED monthly fetch failed: %s", e)
+        try:
+            from macro.delta_calculator import calculate_all_deltas
+            calculate_all_deltas()
+        except Exception as e:
+            log.error("Delta recalc failed: %s", e)
+
+    schedule.every(6).hours.do(job_macro_fetch)
+    schedule.every().day.at("14:00").do(job_macro_monthly)
+
     # YouTube: every 2h scan, no individual Telegram sends
     schedule.every(2).hours.do(job_youtube_scan)
     # H-Fire alerts: immediate via convergence check in job_grok_high
@@ -1317,6 +1400,8 @@ def _run_scheduled():
     log.info("  Every 2h   YouTube scan")
     log.info("  Every 30m  Convergence check")
     log.info("  Every 4h   Watchlist + swaps")
+    log.info("  Every 6h   Macro data (FRED + Yahoo)")
+    log.info("  14:00      FRED monthly check")
 
     while True:
         try:
@@ -1389,6 +1474,8 @@ def main():
     app.add_handler(CommandHandler("notebook", cmd_notebook))
     app.add_handler(CommandHandler("retry", cmd_retry))
     app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("macro", cmd_macro))
+    app.add_handler(CommandHandler("macrothresholds", cmd_macro_thresholds))
     app.add_handler(CommandHandler("update", cmd_update))
     app.add_handler(CommandHandler("consensus", cmd_consensus))
     app.add_handler(CommandHandler("voices", cmd_voices))
