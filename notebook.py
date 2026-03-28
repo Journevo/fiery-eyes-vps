@@ -142,6 +142,20 @@ def _gather_sunflow():
         return "SunFlow: unavailable (%s)" % e
 
 
+def _gather_opus_feedback():
+    try:
+        from opus_feedback import notebook_consensus_shift, notebook_voice_accuracy, notebook_new_claims
+        parts = []
+        parts.append(notebook_consensus_shift())
+        parts.append("")
+        parts.append(notebook_voice_accuracy())
+        parts.append("")
+        parts.append(notebook_new_claims())
+        return "\n".join(parts)
+    except Exception as e:
+        return "Opus feedback: unavailable (%s)" % e
+
+
 OPUS_PROMPT = """You are my portfolio intelligence analyst for Fiery Eyes.
 Below is today's complete intelligence dump.
 
@@ -197,6 +211,11 @@ def generate_notebook():
         "SUNFLOW WHALE DATA",
         "=" * 50,
         _gather_sunflow(),
+        "",
+        "=" * 50,
+        "OPUS FEEDBACK LOOP",
+        "=" * 50,
+        _gather_opus_feedback(),
         "",
         "=" * 50,
         _gather_youtube(),

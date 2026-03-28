@@ -984,8 +984,104 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "\n"
         "<b>Tracking:</b>\n"
         "/ledger — recent recommendations\n"
+        "\n"
+        "<b>Opus Feedback:</b>\n"
+        "/update — push Opus scores/claims/consensus\n"
+        "/consensus TOKEN — 7-day sentiment trend\n"
+        "/voices — accuracy leaderboard\n"
+        "/voice NAME — claims by voice\n"
+        "/claims TOKEN — claims about token\n"
+        "/thesis — active predictions\n"
+        "/learn — strategies library\n"
+        "/thresholds — tracked levels\n"
     )
     await update.message.reply_text(msg, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+
+
+# ---------------------------------------------------------------------------
+# Opus Feedback Loop
+# ---------------------------------------------------------------------------
+
+async def cmd_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process /update ... /end block from Opus feedback."""
+    text = update.message.text or ""
+    if "/end" not in text:
+        await update.message.reply_text(
+            "⚠️ Missing /end marker. Send /update ... /end in a single message.",
+            reply_markup=MAIN_KEYBOARD)
+        return
+    try:
+        from opus_feedback import parse_update
+        result = parse_update(text)
+        await update.message.reply_text(result, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+    except Exception as e:
+        log.error("Opus update failed: %s", e, exc_info=True)
+        await update.message.reply_text("❌ Update failed: %s" % e, reply_markup=MAIN_KEYBOARD)
+
+
+async def cmd_consensus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Query consensus history for a token."""
+    args = (update.message.text or "").split()
+    if len(args) < 2:
+        await update.message.reply_text("Usage: /consensus TOKEN", reply_markup=MAIN_KEYBOARD)
+        return
+    from opus_feedback import query_consensus
+    await update.message.reply_text(
+        query_consensus(args[1]), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+
+
+async def cmd_voices(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show voice accuracy leaderboard."""
+    from opus_feedback import query_voices
+    await update.message.reply_text(
+        query_voices(), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+
+
+async def cmd_voice_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show all claims for a specific voice."""
+    args = (update.message.text or "").split()
+    if len(args) < 2:
+        await update.message.reply_text("Usage: /voice NAME", reply_markup=MAIN_KEYBOARD)
+        return
+    from opus_feedback import query_voice
+    await update.message.reply_text(
+        query_voice(args[1]), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+
+
+async def cmd_claims(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show all claims about a specific token."""
+    args = (update.message.text or "").split()
+    if len(args) < 2:
+        await update.message.reply_text("Usage: /claims TOKEN", reply_markup=MAIN_KEYBOARD)
+        return
+    from opus_feedback import query_claims
+    await update.message.reply_text(
+        query_claims(args[1]), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+
+
+async def cmd_thesis(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show all pending theses by conviction."""
+    from opus_feedback import query_thesis
+    await update.message.reply_text(
+        query_thesis(), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+
+
+async def cmd_learn(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Query strategies, optionally filtered by keyword."""
+    args = (update.message.text or "").split()
+    keyword = args[1] if len(args) >= 2 else None
+    from opus_feedback import query_learn
+    await update.message.reply_text(
+        query_learn(keyword), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+
+
+async def cmd_thresholds(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show all tracked thresholds."""
+    from opus_feedback import query_thresholds
+    await update.message.reply_text(
+        query_thresholds(), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -1140,6 +1236,16 @@ def _run_scheduled():
         except Exception as e:
             log.error("Weekly review failed: %s", e)
 
+
+    def job_thesis_validation():
+        """Sunday midnight: validate pending voice claims against prices."""
+        log.info("Running thesis validation")
+        try:
+            from opus_feedback import run_thesis_validation
+            result = run_thesis_validation(send_to_telegram=True)
+            log.info("Thesis validation: %s", result)
+        except Exception as e:
+            log.error("Thesis validation failed: %s", e)
     # ━━━ SCHEDULE ━━━
     # Data collection
     # Grok polling removed — $0.55/call x_search surcharge
@@ -1175,6 +1281,7 @@ def _run_scheduled():
 
     # Weekly: Sunday 08:00 UTC
     schedule.every().sunday.at("08:00").do(job_weekly)
+    schedule.every().sunday.at("00:00").do(job_thesis_validation)
 
     # YouTube: every 2h scan, no individual Telegram sends
     schedule.every(2).hours.do(job_youtube_scan)
@@ -1282,6 +1389,14 @@ def main():
     app.add_handler(CommandHandler("notebook", cmd_notebook))
     app.add_handler(CommandHandler("retry", cmd_retry))
     app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("update", cmd_update))
+    app.add_handler(CommandHandler("consensus", cmd_consensus))
+    app.add_handler(CommandHandler("voices", cmd_voices))
+    app.add_handler(CommandHandler("voice", cmd_voice_detail))
+    app.add_handler(CommandHandler("claims", cmd_claims))
+    app.add_handler(CommandHandler("thesis", cmd_thesis))
+    app.add_handler(CommandHandler("learn", cmd_learn))
+    app.add_handler(CommandHandler("thresholds", cmd_thresholds))
     app.add_handler(CommandHandler("start", cmd_help))
 
     # Callback and menu handlers
