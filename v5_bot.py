@@ -1,4 +1,4 @@
-"""Fiery Eyes v5.2 — Telegram Bot + Scheduler
+"""Fiery Eyes v7 — Telegram Bot + Scheduler
 
 Handles v5 commands and runs scheduled tasks:
 - /report   — generate daily intelligence report on demand
@@ -1436,7 +1436,7 @@ def main():
         log.error("TELEGRAM_BOT_TOKEN not set")
         return
 
-    log.info("Starting Fiery Eyes v6.0 bot...")
+    log.info("Starting Fiery Eyes v7 bot...")
 
     # Start SunFlow Telegram listener in background thread
     def _run_sunflow():

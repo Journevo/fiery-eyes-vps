@@ -1126,6 +1126,15 @@ def process_video(channel_name: str, video: dict, send_alert: bool = True) -> di
     else:
         log.debug("Skipping YouTube alert for %s — Haiku, no high-conviction watchlist mention", video_title[:50])
 
+
+    # Enrich lessons from this video
+    try:
+        from lesson_enrichment import check_enrichment
+        summary_text = analysis.get("summary", "") if isinstance(analysis, dict) else str(analysis)
+        pub_date = str(published_at)[:10] if published_at else ""
+        check_enrichment(summary_text, channel_name, pub_date)
+    except Exception as e_enrich:
+        log.debug("Enrichment failed: %s", e_enrich)
     return {
         "video_id": video_id,
         "channel_name": channel_name,

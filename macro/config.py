@@ -43,7 +43,7 @@ FRED_SERIES = {
 
     # INTERNATIONAL RATES
     "IRSTCB01JPM156N": {"name": "Japan BOJ Rate", "country": "JP", "category": "rates_intl", "frequency": "monthly", "unit": "%"},
-    "BOERUKM": {"name": "UK BOE Rate", "country": "UK", "category": "rates_intl", "frequency": "monthly", "unit": "%"},
+    "IUDSOIA": {"name": "UK BOE Rate", "country": "UK", "category": "rates_intl", "frequency": "daily", "unit": "%"},
     "ECBMLFR": {"name": "ECB Main Rate", "country": "EU", "category": "rates_intl", "frequency": "monthly", "unit": "%"},
 
     # INTERNATIONAL YIELDS
@@ -55,6 +55,11 @@ FRED_SERIES = {
     "LRHUTTTTJPM156S": {"name": "Japan Unemployment", "country": "JP", "category": "employment_intl", "frequency": "monthly", "unit": "%"},
     "LRHUTTTTGBM156S": {"name": "UK Unemployment", "country": "UK", "category": "employment_intl", "frequency": "monthly", "unit": "%"},
     "LRHUTTTTEZM156S": {"name": "EU Unemployment", "country": "EU", "category": "employment_intl", "frequency": "monthly", "unit": "%"},
+
+    # INTERNATIONAL GDP GROWTH
+    "NAEXKP01GBQ657S": {"name": "UK GDP Growth", "country": "UK", "category": "growth_intl", "frequency": "quarterly", "unit": "%"},
+    "NAEXKP01EZQ657S": {"name": "EU GDP Growth", "country": "EU", "category": "growth_intl", "frequency": "quarterly", "unit": "%"},
+    "NAEXKP01JPQ657S": {"name": "Japan GDP Growth", "country": "JP", "category": "growth_intl", "frequency": "quarterly", "unit": "%"},
 
     # INTERNATIONAL CPI
     "JPNCPIALLMINMEI": {"name": "Japan CPI", "country": "JP", "category": "inflation_intl", "frequency": "monthly", "unit": "index"},

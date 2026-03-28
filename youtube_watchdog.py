@@ -13,7 +13,7 @@ import requests
 log = get_logger("youtube_watchdog")
 
 KEYBOARD = {
-    "keyboard": [["📊 Intel", "🐋 Signals", "🔥 Fiery Eyes"], ["💼 Portfolio", "⚙️ System"]],
+    "keyboard": [["🌍 Macro", "₿ Cycle", "🪙 Tokens"], ["🧠 Intel", "📚 Learn", "💼 Command"]],
     "resize_keyboard": True, "is_persistent": True,
 }
 

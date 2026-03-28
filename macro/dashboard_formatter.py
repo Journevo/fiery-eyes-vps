@@ -30,9 +30,9 @@ def _get(series_key: str) -> dict:
 
 
 def _v(val, fmt="%.2f", scale=1, suffix=""):
-    """Format a value, returning '—' if None."""
+    """Format a value, returning dash if None."""
     if val is None:
-        return "—"
+        return "-"
     v = float(val) * scale
     if abs(v) >= 10000:
         return "%dK%s" % (v / 1000, suffix)
@@ -40,9 +40,9 @@ def _v(val, fmt="%.2f", scale=1, suffix=""):
 
 
 def _pct(now, then):
-    """Calculate percentage change."""
+    """Percentage change between two values."""
     if now is None or then is None or then == 0:
-        return "—"
+        return "-"
     p = ((float(now) - float(then)) / abs(float(then))) * 100
     return "%+.1f%%" % p
 
@@ -51,7 +51,6 @@ def _trend(d):
     """Direction + acceleration emoji."""
     direction = d.get("dir", "flat")
     accel = d.get("accel", "stable")
-    series_key = ""  # Not needed for emoji
     if direction == "rising":
         base = "📈"
     elif direction == "falling":
@@ -65,11 +64,12 @@ def _trend(d):
     return base
 
 
+# ---------------------------------------------------------------------------
+# RISK BAROMETER (fast-moving: Now | 1W | 1M | 3M | 6M)
+# ---------------------------------------------------------------------------
 def format_risk_barometer() -> str:
-    """Risk barometer + direction section."""
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     vix = _get("VIXCLS")
-    move = _get("^VIX")  # May overlap with FRED VIX
     hyg = _get("HYG")
     dxy = _get("DX-Y.NYB")
     if not dxy.get("now"):
@@ -78,35 +78,42 @@ def format_risk_barometer() -> str:
     oil = _get("DCOILBRENTEU")
     if not oil.get("now"):
         oil = _get("BZ=F")
-    gold = _get("GOLDAMGBD228NLBM")
-    if not gold.get("now"):
-        gold = _get("GC=F")
+    gold = _get("GC=F")
     copper = _get("HG=F")
+
+    def _fast(name, d, fmt="%.1f"):
+        return "%-12s %7s %6s %6s %6s %6s %s" % (
+            name, _v(d.get("now"), fmt),
+            _pct(d.get("now"), d.get("1w")), _pct(d.get("now"), d.get("1m")),
+            _pct(d.get("now"), d.get("3m")), _pct(d.get("now"), d.get("6m")),
+            _trend(d))
 
     lines = [
         "📊 <b>MACRO DASHBOARD</b>",
         "📅 %s\n" % now_str,
         "━━━ RISK BAROMETER ━━━",
         "<pre>",
-        "%-14s %8s %8s %8s %s" % ("", "Now", "1M", "3M", "Trend"),
-        "%-14s %8s %8s %8s %s" % ("VIX", _v(vix.get("now"), "%.1f"), _v(vix.get("1m"), "%.1f"), _v(vix.get("3m"), "%.1f"), _trend(vix)),
-        "%-14s %8s %8s %8s %s" % ("HYG", _v(hyg.get("now"), "%.1f"), _v(hyg.get("1m"), "%.1f"), _v(hyg.get("3m"), "%.1f"), _trend(hyg)),
+        "%-12s %7s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M"),
+        _fast("VIX", vix),
+        _fast("HYG", hyg),
         "</pre>\n",
         "━━━ DIRECTION ━━━",
         "<pre>",
-        "%-14s %8s %8s %8s %s" % ("", "Now", "1M", "3M", "Trend"),
-        "%-14s %8s %8s %8s %s" % ("DXY", _v(dxy.get("now"), "%.1f"), _v(dxy.get("1m"), "%.1f"), _v(dxy.get("3m"), "%.1f"), _trend(dxy)),
-        "%-14s %8s %8s %8s %s" % ("US 10Y", _v(us10.get("now")), _v(us10.get("1m")), _v(us10.get("3m")), _trend(us10)),
-        "%-14s %8s %8s %8s %s" % ("Oil Brent", _v(oil.get("now"), "%.1f"), _v(oil.get("1m"), "%.1f"), _v(oil.get("3m"), "%.1f"), _trend(oil)),
-        "%-14s %8s %8s %8s %s" % ("Gold", _v(gold.get("now"), "%.0f"), _v(gold.get("1m"), "%.0f"), _v(gold.get("3m"), "%.0f"), _trend(gold)),
-        "%-14s %8s %8s %8s %s" % ("Copper", _v(copper.get("now"), "%.2f"), _v(copper.get("1m"), "%.2f"), _v(copper.get("3m"), "%.2f"), _trend(copper)),
+        "%-12s %7s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M"),
+        _fast("DXY", dxy),
+        _fast("US 10Y", us10, "%.2f"),
+        _fast("Brent", oil),
+        _fast("Gold", gold, "%.0f"),
+        _fast("Copper", copper, "%.2f"),
         "</pre>",
     ]
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# US ECONOMY (slow-moving: Now | 1M | 3M | 6M | 1Y)
+# ---------------------------------------------------------------------------
 def format_us_economy() -> str:
-    """US economy section."""
     gdp = _get("A191RL1Q225SBEA")
     unemp = _get("UNRATE")
     claims = _get("ICSA")
@@ -115,25 +122,33 @@ def format_us_economy() -> str:
     sent = _get("UMCSENT")
     housing = _get("HOUST")
 
+    def _slow(name, d, fmt="%.1f", scale=1, suf=""):
+        return "%-15s %7s %7s %7s %7s %7s %s" % (
+            name, _v(d.get("now"), fmt, scale, suf),
+            _v(d.get("1m"), fmt, scale, suf), _v(d.get("3m"), fmt, scale, suf),
+            _v(d.get("6m"), fmt, scale, suf), _v(d.get("1y"), fmt, scale, suf),
+            _trend(d))
+
     lines = [
         "━━━ 🇺🇸 US ECONOMY ━━━",
         "<pre>",
-        "%-16s %7s %7s %7s %7s %s" % ("", "Now", "1M", "3M", "1Y", "Trend"),
-        "%-16s %7s %7s %7s %7s %s" % ("GDP Growth", _v(gdp.get("now"), "%.1f", suffix="%"), _v(gdp.get("1m"), "%.1f"), _v(gdp.get("3m"), "%.1f"), _v(gdp.get("1y"), "%.1f"), _trend(gdp)),
-        "%-16s %7s %7s %7s %7s %s" % ("Unemployment", _v(unemp.get("now"), "%.1f", suffix="%"), _v(unemp.get("1m"), "%.1f"), _v(unemp.get("3m"), "%.1f"), _v(unemp.get("1y"), "%.1f"), _trend(unemp)),
-        "%-16s %7s %7s %7s %7s %s" % ("Jobless Claims", _v(claims.get("now"), "%.0f", scale=0.001, suffix="K"), _v(claims.get("1m"), "%.0f", scale=0.001, suffix="K"), _v(claims.get("3m"), "%.0f", scale=0.001, suffix="K"), _v(claims.get("1y"), "%.0f", scale=0.001, suffix="K"), _trend(claims)),
-        "%-16s %7s %7s %7s %7s %s" % ("Nonfarm Payroll", _v(nfp.get("now"), "%.0f", scale=0.001, suffix="K"), _v(nfp.get("1m"), "%.0f", scale=0.001, suffix="K"), _v(nfp.get("3m"), "%.0f", scale=0.001, suffix="K"), _v(nfp.get("1y"), "%.0f", scale=0.001, suffix="K"), _trend(nfp)),
-        "%-16s %7s %7s %7s %7s %s" % ("Job Openings", _v(jo.get("now"), "%.0f", scale=0.001, suffix="K"), _v(jo.get("1m"), "%.0f", scale=0.001, suffix="K"), _v(jo.get("3m"), "%.0f", scale=0.001, suffix="K"), _v(jo.get("1y"), "%.0f", scale=0.001, suffix="K"), _trend(jo)),
-        "%-16s %7s %7s %7s %7s %s" % ("Consumer Sent", _v(sent.get("now"), "%.1f"), _v(sent.get("1m"), "%.1f"), _v(sent.get("3m"), "%.1f"), _v(sent.get("1y"), "%.1f"), _trend(sent)),
-        "%-16s %7s %7s %7s %7s %s" % ("Housing Starts", _v(housing.get("now"), "%.0f", scale=0.001, suffix="K"), _v(housing.get("1m"), "%.0f", scale=0.001, suffix="K"), _v(housing.get("3m"), "%.0f", scale=0.001, suffix="K"), _v(housing.get("1y"), "%.0f", scale=0.001, suffix="K"), _trend(housing)),
+        "%-15s %7s %7s %7s %7s %7s" % ("", "Now", "1M", "3M", "6M", "1Y"),
+        _slow("GDP Growth", gdp, "%.1f", suffix="%"),
+        _slow("Unemployment", unemp, "%.1f", suffix="%"),
+        _slow("Jobless Clms", claims, "%.0f", scale=0.001, suf="K"),
+        _slow("Nonfarm", nfp, "%.0f", scale=0.001, suf="K"),
+        _slow("Job Openings", jo, "%.0f", scale=0.001, suf="K"),
+        _slow("Consumer Snt", sent, "%.1f"),
+        _slow("Housing Strt", housing, "%.0f", scale=0.001, suf="K"),
         "</pre>",
     ]
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# INFLATION & YIELDS (slow-moving: Now | 1M | 3M | 6M | 1Y)
+# ---------------------------------------------------------------------------
 def format_inflation_yields() -> str:
-    """Inflation & yields section."""
-    # For CPI/PCE indices, compute YoY %
     cpi = _get("CPIAUCSL")
     pce = _get("PCEPILFE")
     fed = _get("FEDFUNDS")
@@ -144,49 +159,83 @@ def format_inflation_yields() -> str:
     spread = _get("T10Y2Y")
     mtg = _get("MORTGAGE30US")
 
-    # CPI/PCE YoY
-    cpi_yoy = _pct(cpi.get("now"), cpi.get("1y")) if cpi.get("1y") else _v(cpi.get("now"))
-    pce_yoy = _pct(pce.get("now"), pce.get("1y")) if pce.get("1y") else _v(pce.get("now"))
+    cpi_yoy = _pct(cpi.get("now"), cpi.get("1y")) if cpi.get("1y") else "-"
+    pce_yoy = _pct(pce.get("now"), pce.get("1y")) if pce.get("1y") else "-"
+
+    def _yld(name, d):
+        return "%-15s %7s %7s %7s %7s %7s %s" % (
+            name, _v(d.get("now"), "%.2f%%"),
+            _v(d.get("1m"), "%.2f"), _v(d.get("3m"), "%.2f"),
+            _v(d.get("6m"), "%.2f"), _v(d.get("1y"), "%.2f"),
+            _trend(d))
 
     lines = [
         "━━━ INFLATION & YIELDS ━━━",
         "<pre>",
-        "%-16s %7s %7s %7s %7s %s" % ("", "Now", "1M", "3M", "1Y", "Trend"),
-        "%-16s %7s %7s %7s %7s %s" % ("CPI YoY", cpi_yoy, _pct(cpi.get("1m"), cpi.get("1y")), "", "", _trend(cpi)),
-        "%-16s %7s %7s %7s %7s %s" % ("Core PCE YoY", pce_yoy, _pct(pce.get("1m"), pce.get("1y")), "", "", _trend(pce)),
-        "%-16s %7s %7s %7s %7s %s" % ("Fed Rate", _v(fed.get("now"), "%.2f", suffix="%"), _v(fed.get("1m"), "%.2f"), _v(fed.get("3m"), "%.2f"), _v(fed.get("1y"), "%.2f"), _trend(fed)),
-        "%-16s %7s %7s %7s %7s %s" % ("US 2Y", _v(y2.get("now"), "%.2f", suffix="%"), _v(y2.get("1m"), "%.2f"), _v(y2.get("3m"), "%.2f"), _v(y2.get("1y"), "%.2f"), _trend(y2)),
-        "%-16s %7s %7s %7s %7s %s" % ("US 5Y", _v(y5.get("now"), "%.2f", suffix="%"), _v(y5.get("1m"), "%.2f"), _v(y5.get("3m"), "%.2f"), _v(y5.get("1y"), "%.2f"), _trend(y5)),
-        "%-16s %7s %7s %7s %7s %s" % ("US 10Y", _v(y10.get("now"), "%.2f", suffix="%"), _v(y10.get("1m"), "%.2f"), _v(y10.get("3m"), "%.2f"), _v(y10.get("1y"), "%.2f"), _trend(y10)),
-        "%-16s %7s %7s %7s %7s %s" % ("US 30Y", _v(y30.get("now"), "%.2f", suffix="%"), _v(y30.get("1m"), "%.2f"), _v(y30.get("3m"), "%.2f"), _v(y30.get("1y"), "%.2f"), _trend(y30)),
-        "%-16s %7s %7s %7s %7s %s" % ("2Y/10Y Spread", _v(spread.get("now"), "%+.2f"), _v(spread.get("1m"), "%+.2f"), _v(spread.get("3m"), "%+.2f"), _v(spread.get("1y"), "%+.2f"), _trend(spread)),
-        "%-16s %7s %7s %7s %7s %s" % ("30Y Mortgage", _v(mtg.get("now"), "%.2f", suffix="%"), _v(mtg.get("1m"), "%.2f"), _v(mtg.get("3m"), "%.2f"), _v(mtg.get("1y"), "%.2f"), _trend(mtg)),
+        "%-15s %7s %7s %7s %7s %7s" % ("", "Now", "1M", "3M", "6M", "1Y"),
+        "%-15s %7s" % ("CPI YoY", cpi_yoy),
+        "%-15s %7s" % ("Core PCE YoY", pce_yoy),
+        _yld("Fed Rate", fed),
+        _yld("US 2Y", y2),
+        _yld("US 5Y", y5),
+        _yld("US 10Y", y10),
+        _yld("US 30Y", y30),
+        "%-15s %7s %7s %7s %7s %7s %s" % (
+            "2Y/10Y Spread", _v(spread.get("now"), "%+.2f"),
+            _v(spread.get("1m"), "%+.2f"), _v(spread.get("3m"), "%+.2f"),
+            _v(spread.get("6m"), "%+.2f"), _v(spread.get("1y"), "%+.2f"),
+            _trend(spread)),
+        _yld("30Y Mortgage", mtg),
         "</pre>",
     ]
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# GLOBAL COMPARISON (slow-moving, compact)
+# ---------------------------------------------------------------------------
 def format_global_comparison() -> str:
-    """Global comparison + carry trade."""
+    # Rates (with hardcoded fallbacks for stale FRED international data)
     us_r = _get("FEDFUNDS")
-    uk_r = _get("BOERUKM")
+    uk_r = _get("IUDSOIA")
     eu_r = _get("ECBMLFR")
     jp_r = _get("IRSTCB01JPM156N")
+    if not jp_r.get("now"):
+        jp_r = {"now": 0.50, "dir": "rising"}  # BOJ raised to 0.5% Jan 2025
 
+    # 10Y yields
     us_10 = _get("DGS10")
     uk_10 = _get("IRLTLT01GBM156N")
     eu_10 = _get("IRLTLT01DEM156N")
     jp_10 = _get("IRLTLT01JPM156N")
 
+    # Unemployment
     us_u = _get("UNRATE")
     uk_u = _get("LRHUTTTTGBM156S")
     eu_u = _get("LRHUTTTTEZM156S")
+    if not eu_u.get("now"):
+        eu_u = _get("LRHUTTTTEUM156S")
+    if not eu_u.get("now"):
+        eu_u = {"now": 6.1, "dir": "flat"}  # Eurostat Dec 2025
     jp_u = _get("LRHUTTTTJPM156S")
 
+    # GDP
+    us_gdp = _get("A191RL1Q225SBEA")
+    uk_gdp = _get("NAEXKP01GBQ657S")
+    eu_gdp = _get("NAEXKP01EZQ657S")
+    jp_gdp = _get("NAEXKP01JPQ657S")
+
+    def _row(flag, name, gdp, unemp, rate, y10):
+        return "%s %-5s %6s %6s %6s %6s" % (
+            flag, name,
+            _v(gdp.get("now"), "%.1f%%") if gdp.get("now") else "-",
+            _v(unemp.get("now"), "%.1f%%") if unemp.get("now") else "-",
+            _v(rate.get("now"), "%.2f%%") if rate.get("now") else "-",
+            _v(y10.get("now"), "%.2f%%") if y10.get("now") else "-")
+
+    # Carry trade
     usdjpy = _get("JPY=X")
     nikkei = _get("^N225")
-
-    # Carry trade status
     jpy_val = float(usdjpy.get("now")) if usdjpy.get("now") else None
     if jpy_val and jpy_val > 150:
         carry = "✅ STABLE"
@@ -201,16 +250,16 @@ def format_global_comparison() -> str:
 
     fed_v = float(us_r.get("now")) if us_r.get("now") else 0
     boj_v = float(jp_r.get("now")) if jp_r.get("now") else 0
-    gap = "%.2f%%" % (fed_v - boj_v) if fed_v and boj_v else "?"
+    gap = "%.2f%%" % (fed_v - boj_v) if fed_v else "?"
 
     lines = [
         "━━━ 🌍 GLOBAL COMPARISON ━━━",
         "<pre>",
-        "%-8s %6s %6s %6s %6s" % ("", "Rate", "10Y", "Unemp", "Trend"),
-        "%-8s %6s %6s %6s" % ("🇺🇸 US", _v(us_r.get("now"), "%.2f%%"), _v(us_10.get("now"), "%.2f%%"), _v(us_u.get("now"), "%.1f%%")),
-        "%-8s %6s %6s %6s" % ("🇬🇧 UK", _v(uk_r.get("now"), "%.2f%%"), _v(uk_10.get("now"), "%.2f%%"), _v(uk_u.get("now"), "%.1f%%")),
-        "%-8s %6s %6s %6s" % ("🇪🇺 EU", _v(eu_r.get("now"), "%.2f%%"), _v(eu_10.get("now"), "%.2f%%"), _v(eu_u.get("now"), "%.1f%%")),
-        "%-8s %6s %6s %6s" % ("🇯🇵 JP", _v(jp_r.get("now"), "%.2f%%"), _v(jp_10.get("now"), "%.2f%%"), _v(jp_u.get("now"), "%.1f%%")),
+        "%-8s %6s %6s %6s %6s" % ("", "GDP", "Unemp", "Rate", "10Y"),
+        _row("🇺🇸", "US", us_gdp, us_u, us_r, us_10),
+        _row("🇬🇧", "UK", uk_gdp, uk_u, uk_r, uk_10),
+        _row("🇪🇺", "EU", eu_gdp, eu_u, eu_r, eu_10),
+        _row("🇯🇵", "JP", jp_gdp, jp_u, jp_r, jp_10),
         "</pre>\n",
         "━━━ 🇯🇵 CARRY TRADE ━━━",
         "BOJ: %s%% | Fed: %s%% | Gap: %s" % (_v(jp_r.get("now"), "%.2f"), _v(us_r.get("now"), "%.2f"), gap),
@@ -220,8 +269,10 @@ def format_global_comparison() -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# COMMODITIES & CURRENCIES (fast-moving: Now | 1W | 1M | 3M | 6M)
+# ---------------------------------------------------------------------------
 def format_commodities_currencies() -> str:
-    """Commodities + currencies."""
     gold = _get("GC=F")
     silver = _get("SI=F")
     plat = _get("PL=F")
@@ -237,39 +288,43 @@ def format_commodities_currencies() -> str:
     cny = _get("CNY=X")
     aud = _get("AUDUSD=X")
 
-    def _row(name, d, fmt="%.2f"):
-        return "%-14s %8s %8s %8s %8s %s" % (
-            name, _v(d.get("now"), fmt), _pct(d.get("now"), d.get("1w")),
-            _pct(d.get("now"), d.get("1m")), _pct(d.get("now"), d.get("3m")), _trend(d))
+    def _fast(name, d, fmt="%.2f"):
+        return "%-12s %7s %6s %6s %6s %6s %s" % (
+            name, _v(d.get("now"), fmt),
+            _pct(d.get("now"), d.get("1w")), _pct(d.get("now"), d.get("1m")),
+            _pct(d.get("now"), d.get("3m")), _pct(d.get("now"), d.get("6m")),
+            _trend(d))
 
     lines = [
         "━━━ COMMODITIES ━━━",
         "<pre>",
-        "%-14s %8s %8s %8s %8s %s" % ("", "Now", "1W", "1M", "3M", ""),
-        _row("Gold", gold, "%.0f"),
-        _row("Silver", silver),
-        _row("Platinum", plat, "%.0f"),
-        _row("Copper", copper),
-        _row("WTI Crude", wti),
-        _row("Brent Crude", brent),
-        _row("Nat Gas", gas),
+        "%-12s %7s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M"),
+        _fast("Gold", gold, "%.0f"),
+        _fast("Silver", silver),
+        _fast("Platinum", plat, "%.0f"),
+        _fast("Copper", copper),
+        _fast("WTI", wti),
+        _fast("Brent", brent),
+        _fast("Nat Gas", gas),
         "</pre>\n",
         "━━━ CURRENCIES ━━━",
         "<pre>",
-        "%-14s %8s %8s %8s %8s %s" % ("", "Now", "1W", "1M", "3M", ""),
-        _row("DXY", dxy, "%.1f"),
-        _row("EUR/USD", eur, "%.4f"),
-        _row("GBP/USD", gbp, "%.4f"),
-        _row("USD/JPY", jpy, "%.1f"),
-        _row("USD/CNY", cny, "%.2f"),
-        _row("AUD/USD", aud, "%.4f"),
+        "%-12s %7s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M"),
+        _fast("DXY", dxy, "%.1f"),
+        _fast("EUR/USD", eur, "%.4f"),
+        _fast("GBP/USD", gbp, "%.4f"),
+        _fast("USD/JPY", jpy, "%.1f"),
+        _fast("USD/CNY", cny, "%.2f"),
+        _fast("AUD/USD", aud, "%.4f"),
         "</pre>",
     ]
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# INDICES & KEY STOCKS (fast-moving: Now | 1W | 1M | 3M | 6M)
+# ---------------------------------------------------------------------------
 def format_indices_stocks() -> str:
-    """Indices + key stocks."""
     spx = _get("^GSPC")
     ndx = _get("^NDX")
     dji = _get("^DJI")
@@ -286,40 +341,44 @@ def format_indices_stocks() -> str:
     tlt = _get("TLT")
     hyg = _get("HYG")
 
-    def _row(name, d, fmt="%.0f"):
-        return "%-14s %8s %8s %8s %8s %s" % (
-            name, _v(d.get("now"), fmt), _pct(d.get("now"), d.get("1w")),
-            _pct(d.get("now"), d.get("1m")), _pct(d.get("now"), d.get("3m")), _trend(d))
+    def _fast(name, d, fmt="%.0f"):
+        return "%-12s %7s %6s %6s %6s %6s %s" % (
+            name, _v(d.get("now"), fmt),
+            _pct(d.get("now"), d.get("1w")), _pct(d.get("now"), d.get("1m")),
+            _pct(d.get("now"), d.get("3m")), _pct(d.get("now"), d.get("6m")),
+            _trend(d))
 
     lines = [
         "━━━ INDICES ━━━",
         "<pre>",
-        "%-14s %8s %8s %8s %8s %s" % ("", "Now", "1W", "1M", "3M", ""),
-        _row("S&P 500", spx),
-        _row("Nasdaq 100", ndx),
-        _row("Dow Jones", dji),
-        _row("Russell 2000", rut),
-        _row("FTSE 100", ftse),
-        _row("Nikkei 225", nik),
-        _row("Hang Seng", hsi),
+        "%-12s %7s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M"),
+        _fast("S&P 500", spx),
+        _fast("Nasdaq", ndx),
+        _fast("Dow Jones", dji),
+        _fast("Russell", rut),
+        _fast("FTSE 100", ftse),
+        _fast("Nikkei", nik),
+        _fast("Hang Seng", hsi),
         "</pre>\n",
         "━━━ KEY STOCKS ━━━",
         "<pre>",
-        "%-14s %8s %8s %8s %8s %s" % ("", "Now", "1W", "1M", "3M", ""),
-        _row("NVDA", nvda, "%.1f"),
-        _row("TSLA", tsla, "%.1f"),
-        _row("MSTR", mstr, "%.1f"),
-        _row("COIN", coin, "%.1f"),
-        _row("KRE (Banks)", kre, "%.1f"),
-        _row("TLT (Bonds)", tlt, "%.1f"),
-        _row("HYG (Junk)", hyg, "%.1f"),
+        "%-12s %7s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M"),
+        _fast("NVDA", nvda, "%.1f"),
+        _fast("TSLA", tsla, "%.1f"),
+        _fast("MSTR", mstr, "%.1f"),
+        _fast("COIN", coin, "%.1f"),
+        _fast("KRE Banks", kre, "%.1f"),
+        _fast("TLT Bonds", tlt, "%.1f"),
+        _fast("HYG Junk", hyg, "%.1f"),
         "</pre>",
     ]
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# MACRO CHANGES (for morning brief)
+# ---------------------------------------------------------------------------
 def format_macro_changes() -> str:
-    """Overnight changes for morning brief."""
     rows = execute(
         """SELECT series_key, name, current_value, value_1d
            FROM macro_dashboard_cache
@@ -338,7 +397,7 @@ def format_macro_changes() -> str:
         if pct > 1.0 or (critical and pct > 0.3):
             arrow = "📈" if float(current) > float(prev) else "📉"
             changes.append((pct, "%s %s: %s → %s (%+.1f%%)" % (
-                arrow, name, _v(float(prev)), _v(float(current)), 
+                arrow, name, _v(float(prev)), _v(float(current)),
                 ((float(current) - float(prev)) / abs(float(prev))) * 100)))
 
     if not changes:
@@ -351,8 +410,10 @@ def format_macro_changes() -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# MACRO PULSE (for notebook / Huoyan pulse)
+# ---------------------------------------------------------------------------
 def format_macro_pulse() -> str:
-    """One-line macro summary for the Huoyan pulse."""
     vix = _get("VIXCLS")
     us10 = _get("DGS10")
     oil = _get("DCOILBRENTEU")
@@ -366,7 +427,7 @@ def format_macro_pulse() -> str:
         p = ((float(spx["now"]) - float(spx["1d"])) / abs(float(spx["1d"]))) * 100
         spx_pct = "%+.1f%%" % p
     else:
-        spx_pct = "—"
+        spx_pct = "-"
 
     return (
         "━━━ MACRO PULSE ━━━\n"
@@ -379,6 +440,9 @@ def format_macro_pulse() -> str:
     )
 
 
+# ---------------------------------------------------------------------------
+# PUBLIC API
+# ---------------------------------------------------------------------------
 def format_full_dashboard() -> list[str]:
     """Generate complete macro dashboard as list of Telegram messages."""
     return [

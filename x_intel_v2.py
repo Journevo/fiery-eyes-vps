@@ -42,7 +42,7 @@ RESEARCH_QUERIES = [
 
 # Persistent keyboard for Telegram
 _KEYBOARD_JSON = {
-    "keyboard": [["📊 Intel", "🐋 Signals", "🔥 Fiery Eyes"], ["💼 Portfolio", "⚙️ System"]],
+    "keyboard": [["🌍 Macro", "₿ Cycle", "🪙 Tokens"], ["🧠 Intel", "📚 Learn", "💼 Command"]],
     "resize_keyboard": True,
     "is_persistent": True,
 }
