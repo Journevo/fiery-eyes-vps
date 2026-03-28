@@ -1135,6 +1135,14 @@ def process_video(channel_name: str, video: dict, send_alert: bool = True) -> di
         check_enrichment(summary_text, channel_name, pub_date)
     except Exception as e_enrich:
         log.debug("Enrichment failed: %s", e_enrich)
+
+    # Auto-extract claims from summary (Phase 5)
+    try:
+        from claim_extractor import extract_and_store
+        summary_text = analysis.get("summary", "") if isinstance(analysis, dict) else str(analysis)
+        extract_and_store(summary_text, channel_name, published_at)
+    except Exception as e_claim:
+        log.debug("Claim extraction failed: %s", e_claim)
     return {
         "video_id": video_id,
         "channel_name": channel_name,

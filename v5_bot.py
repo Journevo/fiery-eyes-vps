@@ -1047,6 +1047,28 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ---------------------------------------------------------------------------
+# Phase 4 Commands (Correlation Engine + Cycle Score)
+# ---------------------------------------------------------------------------
+
+async def cmd_correlations(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show all correlation patterns with current status."""
+    try:
+        from correlation_engine import format_correlations
+        await update.message.reply_text(format_correlations(), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+    except Exception as e:
+        await update.message.reply_text("Error: %s" % e, reply_markup=MAIN_KEYBOARD)
+
+
+async def cmd_cyclescore(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show Cycle Confidence Score breakdown."""
+    try:
+        from correlation_engine import format_cycle_score
+        await update.message.reply_text(format_cycle_score(), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+    except Exception as e:
+        await update.message.reply_text("Error: %s" % e, reply_markup=MAIN_KEYBOARD)
+
+
+# ---------------------------------------------------------------------------
 # Phase 2 Commands
 # ---------------------------------------------------------------------------
 
@@ -1425,6 +1447,12 @@ def _run_scheduled():
             check_thresholds(send_alerts=True)
         except Exception as e:
             log.error("Threshold check failed: %s", e)
+        try:
+            from correlation_engine import run_correlation_check, check_contrarian
+            run_correlation_check(send_alerts=True)
+            check_contrarian()
+        except Exception as e:
+            log.error("Correlation check failed: %s", e)
 
     def job_macro_monthly():
         """Daily 14:00: check for FRED monthly/quarterly releases."""
@@ -1552,6 +1580,8 @@ def main():
     app.add_handler(CommandHandler("notebook", cmd_notebook))
     app.add_handler(CommandHandler("retry", cmd_retry))
     app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("correlations", cmd_correlations))
+    app.add_handler(CommandHandler("cyclescore", cmd_cyclescore))
     app.add_handler(CommandHandler("digest", cmd_digest))
     app.add_handler(CommandHandler("addtoken", cmd_addtoken))
     app.add_handler(CommandHandler("scorehistory", cmd_scorehistory))

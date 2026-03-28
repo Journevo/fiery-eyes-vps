@@ -57,8 +57,10 @@ MACRO_MENU_KB = InlineKeyboardMarkup([
 CYCLE_MENU_KB = InlineKeyboardMarkup([
     [InlineKeyboardButton("📊 Position", callback_data="c_position"),
      InlineKeyboardButton("🏗 Structure", callback_data="c_structure")],
-    [InlineKeyboardButton("📡 Regime", callback_data="c_regime"),
+    [InlineKeyboardButton("🎯 Score", callback_data="c_score"),
      InlineKeyboardButton("📊 Consensus", callback_data="c_consensus")],
+    [InlineKeyboardButton("📡 Regime", callback_data="c_regime"),
+     InlineKeyboardButton("🔗 Correlations", callback_data="c_correlations")],
     [InlineKeyboardButton("◀️ Back", callback_data="menu_main")],
 ])
 
@@ -240,6 +242,21 @@ async def handle_v7_callback(query, context, data):
         try:
             from opus_feedback import query_consensus
             await bot.send_message(chat_id, query_consensus("BTC"), parse_mode="HTML")
+        except Exception as e:
+            await bot.send_message(chat_id, "Error: %s" % e)
+        return True
+
+    elif data == "c_score":
+        try:
+            from correlation_engine import format_cycle_score
+            await bot.send_message(chat_id, format_cycle_score(), parse_mode="HTML")
+        except Exception as e:
+            await bot.send_message(chat_id, "Error: %s" % e)
+        return True
+    elif data == "c_correlations":
+        try:
+            from correlation_engine import format_correlations
+            await bot.send_message(chat_id, format_correlations(), parse_mode="HTML")
         except Exception as e:
             await bot.send_message(chat_id, "Error: %s" % e)
         return True
