@@ -116,21 +116,83 @@ def send_telegram_with_keyboard(text: str, parse_mode: str = "HTML"):
 # Persistent menu handlers
 # ---------------------------------------------------------------------------
 async def handle_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle V7 persistent keyboard button taps."""
+    """Handle V7 persistent keyboard button taps — show ALL data then drill-down."""
     from menu_v7 import MACRO_MENU_KB, CYCLE_MENU_KB, TOKENS_MENU_KB, INTEL_MENU_KB, LEARN_MENU_KB, COMMAND_MENU_KB
     text = update.message.text
+
     if text == "🌍 Macro":
-        await update.message.reply_text("🌍 <b>Macro Dashboard</b>", parse_mode="HTML", reply_markup=MACRO_MENU_KB)
+        # Send all dashboard sections, drill-down on last
+        try:
+            from macro.dashboard_formatter import format_full_dashboard
+            msgs = format_full_dashboard()
+            for i, msg in enumerate(msgs):
+                if not msg.strip():
+                    continue
+                if i == len(msgs) - 1:
+                    await update.message.reply_text(msg, parse_mode="HTML", reply_markup=MACRO_MENU_KB)
+                else:
+                    await update.message.reply_text(msg, parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+        except Exception as e:
+            log.error("Macro menu failed: %s", e)
+            await update.message.reply_text("🌍 <b>Macro Dashboard</b>", parse_mode="HTML", reply_markup=MACRO_MENU_KB)
+
     elif text == "₿ Cycle":
-        await update.message.reply_text("₿ <b>BTC Cycle</b>", parse_mode="HTML", reply_markup=CYCLE_MENU_KB)
+        # Show cycle position + structure, drill-down on last
+        parts = []
+        try:
+            from cycle_screen import generate_cycle_screen
+            parts.append(generate_cycle_screen())
+        except Exception:
+            pass
+        try:
+            from market_structure import run_market_structure
+            ms = run_market_structure() or {}
+            fg = ms.get("fear_greed", {})
+            fund = ms.get("funding", {})
+            parts.append(
+                "🏗 <b>MARKET STRUCTURE</b>\n"
+                "F&G: %s (%s) | Funding: %s%% | BTC Dom: %s%%" % (
+                    fg.get("value", "?"), fg.get("label", "?"),
+                    fund.get("current_pct", "?"), ms.get("btc_dominance", "?")))
+        except Exception:
+            pass
+        for i, p in enumerate(parts):
+            if i == len(parts) - 1:
+                await update.message.reply_text(p, parse_mode="HTML", reply_markup=CYCLE_MENU_KB)
+            else:
+                await update.message.reply_text(p, reply_markup=MAIN_KEYBOARD)
+        if not parts:
+            await update.message.reply_text("₿ <b>BTC Cycle</b>", parse_mode="HTML", reply_markup=CYCLE_MENU_KB)
+
     elif text == "🪙 Tokens":
-        await update.message.reply_text("🪙 <b>Token Intelligence</b>", parse_mode="HTML", reply_markup=TOKENS_MENU_KB)
+        # Show watchlist prices, drill-down on last
+        try:
+            from watchlist import run_watchlist, format_watchlist_telegram
+            prices = run_watchlist(send_to_telegram=False)
+            if prices:
+                await update.message.reply_text(
+                    format_watchlist_telegram(prices), parse_mode="HTML", reply_markup=TOKENS_MENU_KB)
+            else:
+                await update.message.reply_text("🪙 <b>Token Intelligence</b>", parse_mode="HTML", reply_markup=TOKENS_MENU_KB)
+        except Exception as e:
+            log.error("Tokens menu failed: %s", e)
+            await update.message.reply_text("🪙 <b>Token Intelligence</b>", parse_mode="HTML", reply_markup=TOKENS_MENU_KB)
+
     elif text == "🧠 Intel":
-        await update.message.reply_text("🧠 <b>Intelligence</b>", parse_mode="HTML", reply_markup=INTEL_MENU_KB)
+        # Show today count + drill-down
+        try:
+            from menu_v7 import format_today_intel
+            text_msg = format_today_intel()
+            await update.message.reply_text(text_msg, parse_mode="HTML", reply_markup=INTEL_MENU_KB)
+        except Exception as e:
+            await update.message.reply_text("🧠 <b>Intelligence</b>", parse_mode="HTML", reply_markup=INTEL_MENU_KB)
+
     elif text == "📚 Learn":
         await update.message.reply_text("📚 <b>Learn</b>", parse_mode="HTML", reply_markup=LEARN_MENU_KB)
+
     elif text == "💼 Command":
         await update.message.reply_text("💼 <b>Commands</b>", parse_mode="HTML", reply_markup=COMMAND_MENU_KB)
+
     else:
         log.info("Unrecognized menu text: %s", repr(text))
 

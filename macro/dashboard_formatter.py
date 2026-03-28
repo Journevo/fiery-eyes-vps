@@ -82,10 +82,11 @@ def format_risk_barometer() -> str:
     copper = _get("HG=F")
 
     def _fast(name, d, fmt="%.1f"):
-        return "%-12s %7s %6s %6s %6s %6s %s" % (
+        return "%-12s %7s %6s %6s %6s %6s %6s %s" % (
             name, _v(d.get("now"), fmt),
             _pct(d.get("now"), d.get("1w")), _pct(d.get("now"), d.get("1m")),
             _pct(d.get("now"), d.get("3m")), _pct(d.get("now"), d.get("6m")),
+            _pct(d.get("now"), d.get("1y")),
             _trend(d))
 
     lines = [
@@ -93,13 +94,13 @@ def format_risk_barometer() -> str:
         "📅 %s\n" % now_str,
         "━━━ RISK BAROMETER ━━━",
         "<pre>",
-        "%-12s %7s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M"),
+        "%-12s %7s %6s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M", "1Y"),
         _fast("VIX", vix),
         _fast("HYG", hyg),
         "</pre>\n",
         "━━━ DIRECTION ━━━",
         "<pre>",
-        "%-12s %7s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M"),
+        "%-12s %7s %6s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M", "1Y"),
         _fast("DXY", dxy),
         _fast("US 10Y", us10, "%.2f"),
         _fast("Brent", oil),
@@ -289,16 +290,17 @@ def format_commodities_currencies() -> str:
     aud = _get("AUDUSD=X")
 
     def _fast(name, d, fmt="%.2f"):
-        return "%-12s %7s %6s %6s %6s %6s %s" % (
+        return "%-12s %7s %6s %6s %6s %6s %6s %s" % (
             name, _v(d.get("now"), fmt),
             _pct(d.get("now"), d.get("1w")), _pct(d.get("now"), d.get("1m")),
             _pct(d.get("now"), d.get("3m")), _pct(d.get("now"), d.get("6m")),
+            _pct(d.get("now"), d.get("1y")),
             _trend(d))
 
     lines = [
         "━━━ COMMODITIES ━━━",
         "<pre>",
-        "%-12s %7s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M"),
+        "%-12s %7s %6s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M", "1Y"),
         _fast("Gold", gold, "%.0f"),
         _fast("Silver", silver),
         _fast("Platinum", plat, "%.0f"),
@@ -309,7 +311,7 @@ def format_commodities_currencies() -> str:
         "</pre>\n",
         "━━━ CURRENCIES ━━━",
         "<pre>",
-        "%-12s %7s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M"),
+        "%-12s %7s %6s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M", "1Y"),
         _fast("DXY", dxy, "%.1f"),
         _fast("EUR/USD", eur, "%.4f"),
         _fast("GBP/USD", gbp, "%.4f"),
@@ -342,16 +344,17 @@ def format_indices_stocks() -> str:
     hyg = _get("HYG")
 
     def _fast(name, d, fmt="%.0f"):
-        return "%-12s %7s %6s %6s %6s %6s %s" % (
+        return "%-12s %7s %6s %6s %6s %6s %6s %s" % (
             name, _v(d.get("now"), fmt),
             _pct(d.get("now"), d.get("1w")), _pct(d.get("now"), d.get("1m")),
             _pct(d.get("now"), d.get("3m")), _pct(d.get("now"), d.get("6m")),
+            _pct(d.get("now"), d.get("1y")),
             _trend(d))
 
     lines = [
         "━━━ INDICES ━━━",
         "<pre>",
-        "%-12s %7s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M"),
+        "%-12s %7s %6s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M", "1Y"),
         _fast("S&P 500", spx),
         _fast("Nasdaq", ndx),
         _fast("Dow Jones", dji),
@@ -362,7 +365,7 @@ def format_indices_stocks() -> str:
         "</pre>\n",
         "━━━ KEY STOCKS ━━━",
         "<pre>",
-        "%-12s %7s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M"),
+        "%-12s %7s %6s %6s %6s %6s %6s" % ("", "Now", "1W", "1M", "3M", "6M", "1Y"),
         _fast("NVDA", nvda, "%.1f"),
         _fast("TSLA", tsla, "%.1f"),
         _fast("MSTR", mstr, "%.1f"),
