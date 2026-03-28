@@ -37,14 +37,14 @@ log = get_logger("v5_bot")
 
 # Persistent reply keyboard — always visible at bottom of chat
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
-    [["📊 Intel", "🐋 Signals", "🔥 Fiery Eyes"], ["💼 Portfolio", "⚙️ System"]],
+    [["🌍 Macro", "₿ Cycle", "🪙 Tokens"], ["🧠 Intel", "📚 Learn", "💼 Command"]],
     resize_keyboard=True,
     is_persistent=True,
 )
 
 # Keyboard as JSON for raw API calls (scheduled sends)
 MAIN_KEYBOARD_JSON = {
-    "keyboard": [["📊 Intel", "🐋 Signals", "🔥 Fiery Eyes"], ["💼 Portfolio", "⚙️ System"]],
+    "keyboard": [["🌍 Macro", "₿ Cycle", "🪙 Tokens"], ["🧠 Intel", "📚 Learn", "💼 Command"]],
     "resize_keyboard": True,
     "is_persistent": True,
 }
@@ -84,6 +84,11 @@ def send_telegram_with_keyboard(text: str, parse_mode: str = "HTML"):
             if resp.status_code == 200:
                 log.info("Telegram sent (%d chars, msg %s)",
                          len(chunk), resp.json().get("result", {}).get("message_id", "?"))
+                try:
+                    from menu_v7 import log_telegram_message
+                    log_telegram_message(chunk[:4000])
+                except Exception:
+                    pass
             elif resp.status_code == 400 and parse_mode == "HTML":
                 # HTML parse error — retry without formatting
                 log.warning("Telegram HTML parse failed, retrying as plain text")
@@ -111,63 +116,34 @@ def send_telegram_with_keyboard(text: str, parse_mode: str = "HTML"):
 # Persistent menu handlers
 # ---------------------------------------------------------------------------
 async def handle_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle V6 persistent keyboard button taps."""
+    """Handle V7 persistent keyboard button taps."""
+    from menu_v7 import MACRO_MENU_KB, CYCLE_MENU_KB, TOKENS_MENU_KB, INTEL_MENU_KB, LEARN_MENU_KB, COMMAND_MENU_KB
     text = update.message.text
-
-    if text == "📊 Intel":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("YouTube", callback_data="v6_yt_dash"),
-             InlineKeyboardButton("Macro", callback_data="v6_macro"),
-             InlineKeyboardButton("Liquidity", callback_data="cmd_liquidity"),
-             InlineKeyboardButton("Chain", callback_data="cmd_defi")],
-        ])
-        await update.message.reply_text("📊 <b>Intelligence</b>", parse_mode="HTML", reply_markup=keyboard)
-
-    elif text == "🐋 Signals":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Market", callback_data="cmd_market"),
-             InlineKeyboardButton("Whale", callback_data="cmd_sunflow"),
-             InlineKeyboardButton("Discovery", callback_data="v6_discovery"),
-             InlineKeyboardButton("Unlocks", callback_data="cmd_supply")],
-        ])
-        await update.message.reply_text("🐋 <b>Signals</b>", parse_mode="HTML", reply_markup=keyboard)
-
-    elif text == "🔥 Fiery Eyes":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Morning", callback_data="cmd_report"),
-             InlineKeyboardButton("Evening", callback_data="v6_evening"),
-             InlineKeyboardButton("Notebook", callback_data="v6_notebook"),
-             InlineKeyboardButton("Cycle", callback_data="v6_cycle")],
-        ])
-        await update.message.reply_text("🔥 <b>Fiery Eyes</b>", parse_mode="HTML", reply_markup=keyboard)
-
-    elif text == "💼 Portfolio":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Positions", callback_data="cmd_portfolio"),
-             InlineKeyboardButton("Deep Dive", callback_data="cmd_deepdive"),
-             InlineKeyboardButton("Trades", callback_data="cmd_ledger"),
-             InlineKeyboardButton("Risk", callback_data="cmd_pnl")],
-        ])
-        await update.message.reply_text("💼 <b>Portfolio</b>", parse_mode="HTML", reply_markup=keyboard)
-
-    elif text == "⚙️ System":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Health", callback_data="v6_health"),
-             InlineKeyboardButton("YT Health", callback_data="v6_yt_health"),
-             InlineKeyboardButton("Costs", callback_data="v6_costs"),
-             InlineKeyboardButton("Help", callback_data="tool_help")],
-        ])
-        await update.message.reply_text("⚙️ <b>System</b>", parse_mode="HTML", reply_markup=keyboard)
-
+    if text == "🌍 Macro":
+        await update.message.reply_text("🌍 <b>Macro Dashboard</b>", parse_mode="HTML", reply_markup=MACRO_MENU_KB)
+    elif text == "₿ Cycle":
+        await update.message.reply_text("₿ <b>BTC Cycle</b>", parse_mode="HTML", reply_markup=CYCLE_MENU_KB)
+    elif text == "🪙 Tokens":
+        await update.message.reply_text("🪙 <b>Token Intelligence</b>", parse_mode="HTML", reply_markup=TOKENS_MENU_KB)
+    elif text == "🧠 Intel":
+        await update.message.reply_text("🧠 <b>Intelligence</b>", parse_mode="HTML", reply_markup=INTEL_MENU_KB)
+    elif text == "📚 Learn":
+        await update.message.reply_text("📚 <b>Learn</b>", parse_mode="HTML", reply_markup=LEARN_MENU_KB)
+    elif text == "💼 Command":
+        await update.message.reply_text("💼 <b>Commands</b>", parse_mode="HTML", reply_markup=COMMAND_MENU_KB)
     else:
         log.info("Unrecognized menu text: %s", repr(text))
-
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle inline keyboard button callbacks."""
     query = update.callback_query
     await query.answer()
     data = query.data
+
+    # Try v7 menu callbacks first
+    from menu_v7 import handle_v7_callback
+    if await handle_v7_callback(query, context, data):
+        return
 
     # Map callback data to command functions
     cmd_map = {
@@ -1008,6 +984,40 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ---------------------------------------------------------------------------
+# Phase 2 Commands
+# ---------------------------------------------------------------------------
+
+async def cmd_digest(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Generate and send 24h message digest."""
+    await update.message.reply_text("Generating digest...", reply_markup=MAIN_KEYBOARD)
+    try:
+        from menu_v7 import generate_digest
+        filepath, count = generate_digest()
+        if filepath:
+            with open(filepath, "rb") as f:
+                await context.bot.send_document(update.message.chat_id, f,
+                    caption="Digest: %d items from last 24h" % count)
+        else:
+            await update.message.reply_text("No messages in last 24h.", reply_markup=MAIN_KEYBOARD)
+    except Exception as e:
+        await update.message.reply_text("Error: %s" % e, reply_markup=MAIN_KEYBOARD)
+
+
+async def cmd_addtoken(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Add token to watchlist."""
+    args = (update.message.text or "").split()
+    token = args[1] if len(args) >= 2 else ""
+    from menu_v7 import addtoken
+    await update.message.reply_text(addtoken(token), reply_markup=MAIN_KEYBOARD)
+
+
+async def cmd_scorehistory(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show score change history."""
+    from menu_v7 import format_score_history
+    await update.message.reply_text(format_score_history(), parse_mode="HTML", reply_markup=MAIN_KEYBOARD)
+
+
+# ---------------------------------------------------------------------------
 # Macro Dashboard
 # ---------------------------------------------------------------------------
 
@@ -1207,6 +1217,11 @@ def _run_scheduled():
         result = run_youtube_scan(send_alerts=True)
         if result:
             log.info("YouTube scan: %d new videos processed", result.get("new_videos", 0))
+        try:
+            from menu_v7 import check_discovery_alerts
+            check_discovery_alerts()
+        except Exception as e:
+            log.error("Discovery alert check failed: %s", e)
         return result
 
     def job_nimbus_sync():
@@ -1474,6 +1489,9 @@ def main():
     app.add_handler(CommandHandler("notebook", cmd_notebook))
     app.add_handler(CommandHandler("retry", cmd_retry))
     app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("digest", cmd_digest))
+    app.add_handler(CommandHandler("addtoken", cmd_addtoken))
+    app.add_handler(CommandHandler("scorehistory", cmd_scorehistory))
     app.add_handler(CommandHandler("macro", cmd_macro))
     app.add_handler(CommandHandler("macrothresholds", cmd_macro_thresholds))
     app.add_handler(CommandHandler("update", cmd_update))
@@ -1489,7 +1507,7 @@ def main():
     # Callback and menu handlers
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(
-        filters.TEXT & filters.Regex(r'^(📊 Intel|🐋 Signals|🔥 Fiery Eyes|💼 Portfolio|⚙️ System)$'),
+        filters.TEXT & filters.Regex(r'^(🌍 Macro|₿ Cycle|🪙 Tokens|🧠 Intel|📚 Learn|💼 Command)$'),
         handle_menu_text))
 
     async def post_init(application):

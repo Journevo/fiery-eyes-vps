@@ -8,7 +8,7 @@ from db.connection import execute
 log = get_logger("notebook")
 
 KEYBOARD = {
-    "keyboard": [["📊 Intel", "🐋 Signals", "🔥 Fiery Eyes"], ["💼 Portfolio", "⚙️ System"]],
+    "keyboard": [["🌍 Macro", "₿ Cycle", "🪙 Tokens"], ["🧠 Intel", "📚 Learn", "💼 Command"]],
     "resize_keyboard": True, "is_persistent": True,
 }
 

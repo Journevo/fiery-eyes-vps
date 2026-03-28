@@ -12,7 +12,7 @@ from macro.config import DEFAULT_THRESHOLDS
 log = get_logger("macro.threshold")
 
 KEYBOARD_JSON = {
-    "keyboard": [["📊 Intel", "🐋 Signals", "🔥 Fiery Eyes"], ["💼 Portfolio", "⚙️ System"]],
+    "keyboard": [["🌍 Macro", "₿ Cycle", "🪙 Tokens"], ["🧠 Intel", "📚 Learn", "💼 Command"]],
     "resize_keyboard": True, "is_persistent": True,
 }
 

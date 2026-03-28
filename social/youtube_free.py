@@ -1116,7 +1116,7 @@ def process_video(channel_name: str, video: dict, send_alert: bool = True) -> di
                     req.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
                         json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk,
                               "parse_mode": "HTML", "disable_web_page_preview": True,
-                              "reply_markup": {"keyboard": [["📊 Intel", "🐋 Signals", "🔥 Fiery Eyes"], ["💼 Portfolio", "⚙️ System"]], "resize_keyboard": True, "is_persistent": True}}, timeout=15)
+                              "reply_markup": {"keyboard": [["🌍 Macro", "₿ Cycle", "🪙 Tokens"], ["🧠 Intel", "📚 Learn", "💼 Command"]], "resize_keyboard": True, "is_persistent": True}}, timeout=15)
                 log.info("YouTube Sonnet analysis sent: %s (%d chars)", video_title[:50], len(essay))
             else:
                 log.info("YouTube Sonnet analysis stored (no send): %s", video_title[:50])

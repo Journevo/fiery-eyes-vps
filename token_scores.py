@@ -19,7 +19,7 @@ log = get_logger("token_scores")
 
 # Persistent keyboard for Telegram messages
 _KEYBOARD_JSON = {
-    "keyboard": [["📊 Intel", "🐋 Signals", "🔥 Fiery Eyes"], ["💼 Portfolio", "⚙️ System"]],
+    "keyboard": [["🌍 Macro", "₿ Cycle", "🪙 Tokens"], ["🧠 Intel", "📚 Learn", "💼 Command"]],
     "resize_keyboard": True,
     "is_persistent": True,
 }
