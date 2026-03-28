@@ -395,11 +395,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show the persistent keyboard menu."""
+    """Show the main inline menu with 6 buttons."""
+    from menu_v7 import MAIN_MENU_KB
     await update.message.reply_text(
-        "🔥 <b>FIERY EYES v6.0</b>\nTap a button below:",
+        "🔥 <b>FIERY EYES v7</b>\nTap a button below:",
         parse_mode="HTML",
-        reply_markup=MAIN_KEYBOARD)
+        reply_markup=MAIN_MENU_KB)
 
 
 # ---------------------------------------------------------------------------
@@ -939,7 +940,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show v5 commands and ensure persistent keyboard."""
     msg = (
-        "🔥 <b>FIERY EYES v6.0</b>\n\n"
+        "🔥 <b>FIERY EYES v7</b>\n\n"
         "<b>Reports:</b>\n"
         "/report — daily intelligence report\n"
         "/cycle — BTC cycle position\n"
