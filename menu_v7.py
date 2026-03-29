@@ -117,16 +117,32 @@ async def handle_v7_callback(query, context, data):
         await bot.send_message(chat_id, "🔥 <b>FIERY EYES v7</b>", parse_mode="HTML", reply_markup=MAIN_MENU_KB)
         return True
     elif data == "menu_macro":
-        await bot.send_message(chat_id, "🌍 <b>Macro Dashboard</b>", parse_mode="HTML", reply_markup=MACRO_MENU_KB)
+        try:
+            from unified_views import format_macro_unified
+            await bot.send_message(chat_id, format_macro_unified(), parse_mode="HTML", reply_markup=MACRO_MENU_KB)
+        except Exception as e:
+            await bot.send_message(chat_id, "Error: %s" % e, reply_markup=MACRO_MENU_KB)
         return True
     elif data == "menu_cycle":
-        await bot.send_message(chat_id, "₿ <b>BTC Cycle</b>", parse_mode="HTML", reply_markup=CYCLE_MENU_KB)
+        try:
+            from unified_views import format_cycle_unified
+            await bot.send_message(chat_id, format_cycle_unified(), parse_mode="HTML", reply_markup=CYCLE_MENU_KB)
+        except Exception as e:
+            await bot.send_message(chat_id, "Error: %s" % e, reply_markup=CYCLE_MENU_KB)
         return True
     elif data == "menu_tokens":
-        await bot.send_message(chat_id, "🪙 <b>Token Intelligence</b>", parse_mode="HTML", reply_markup=TOKENS_MENU_KB)
+        try:
+            from unified_views import format_tokens_unified
+            await bot.send_message(chat_id, format_tokens_unified(), parse_mode="HTML", reply_markup=TOKENS_MENU_KB)
+        except Exception as e:
+            await bot.send_message(chat_id, "Error: %s" % e, reply_markup=TOKENS_MENU_KB)
         return True
     elif data == "menu_intel":
-        await bot.send_message(chat_id, "🧠 <b>Intelligence</b>", parse_mode="HTML", reply_markup=INTEL_MENU_KB)
+        try:
+            from unified_views import format_intel_unified
+            await bot.send_message(chat_id, format_intel_unified(), parse_mode="HTML", reply_markup=INTEL_MENU_KB)
+        except Exception as e:
+            await bot.send_message(chat_id, "Error: %s" % e, reply_markup=INTEL_MENU_KB)
         return True
     elif data == "menu_learn":
         await bot.send_message(chat_id, "📚 <b>Learn</b>", parse_mode="HTML", reply_markup=LEARN_MENU_KB)
